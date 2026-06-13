@@ -31,8 +31,24 @@ let ollamaProcess = null; // only set if WE started Ollama (so we only kill what
 
 // --- Ollama (local AI) ---
 
-// A GUI app launched from Finder has a minimal PATH, so look in the usual spots.
+const isWindows = process.platform === "win32";
+
+// The Python interpreter inside the project's virtualenv.
+function venvPython() {
+  const base = path.join(ROOT, "backend", ".venv");
+  return isWindows ? path.join(base, "Scripts", "python.exe") : path.join(base, "bin", "python");
+}
+
+// A GUI app launched from the desktop has a minimal PATH, so look in the usual spots.
 function findOllama() {
+  if (isWindows) {
+    const local = process.env.LOCALAPPDATA || "";
+    const candidates = [
+      path.join(local, "Programs", "Ollama", "ollama.exe"),
+      "C:\\Program Files\\Ollama\\ollama.exe",
+    ];
+    return candidates.find((p) => fs.existsSync(p)) || null;
+  }
   const candidates = ["/opt/homebrew/bin/ollama", "/usr/local/bin/ollama"];
   return candidates.find((p) => fs.existsSync(p)) || null;
 }
@@ -98,17 +114,17 @@ function checkHealth() {
 
 function startBackend() {
   const backendDir = path.join(ROOT, "backend");
-  const venvPython = path.join(backendDir, ".venv", "bin", "python");
-  if (!fs.existsSync(venvPython)) {
+  const python = venvPython();
+  if (!fs.existsSync(python)) {
     dialog.showErrorBox(
       "Backend not set up",
-      `Python venv not found at ${venvPython}.\n\nRun ./start.sh (or follow the README setup) first.`,
+      `Python venv not found at ${python}.\n\nRun the setup script first (start.sh on macOS, start.ps1 on Windows).`,
     );
     app.quit();
     return null;
   }
   const proc = spawn(
-    venvPython,
+    python,
     ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(BACKEND_PORT)],
     { cwd: backendDir, stdio: "inherit" },
   );
@@ -136,7 +152,8 @@ async function createWindow() {
     minHeight: 600,
     backgroundColor: "#0b0e14",
     title: "Swing Scanner",
-    titleBarStyle: "hiddenInset",
+    // Inset traffic-light styling is macOS-only; Windows uses its native frame.
+    ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

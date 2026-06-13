@@ -29,6 +29,10 @@
       "icon": "build/icon.icns",
       "category": "public.app-category.finance",
       "target": "dir"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": "dir"
     }
   }
 }

@@ -105,5 +105,11 @@ ImageDraw.Draw(sheen).rounded_rectangle(
 img.alpha_composite(sheen)
 
 # downscale for anti-aliasing
-img.resize((S, S), Image.LANCZOS).save("icon_1024.png")
-print("wrote icon_1024.png")
+final = img.resize((S, S), Image.LANCZOS)
+final.save("icon_1024.png")
+
+# Windows .ico (multi-resolution; electron-builder embeds it on --win builds)
+final.resize((256, 256), Image.LANCZOS).save(
+    "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+)
+print("wrote icon_1024.png and icon.ico")
