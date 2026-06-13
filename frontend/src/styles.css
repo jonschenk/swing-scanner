@@ -109,6 +109,17 @@ body {
   white-space: nowrap;
 }
 
+.universe-chip {
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;
@@ -554,6 +565,33 @@ body {
 .panel {
   max-height: 88vh;
   overflow-y: auto;
+}
+
+.seg {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.seg-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: #0b0e14;
 }
 
 .panel-foot {

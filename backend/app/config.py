@@ -3,12 +3,16 @@
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 SETTINGS_PATH = Path(__file__).resolve().parents[1] / "settings.json"
 
 
 class ScanSettings(BaseModel):
+    # --- scan scope ---
+    universe: str = Field(default="full")  # "full" (whole US market) or "curated" (tickers.txt)
+    max_results: int = Field(default=30, ge=1, le=200)  # top-N setups to keep & AI-analyze
+
     # --- account & risk ---
     capital: float = Field(default=1000.0, gt=0)  # your trading capital ($)
     risk_pct: float = Field(default=2.0, gt=0, le=100)  # max % of capital to risk per trade
@@ -36,6 +40,11 @@ class ScanSettings(BaseModel):
     near_high_pct: float = Field(default=30.0, ge=0, le=100)  # max % below 52-week high
     min_above_low_pct: float = Field(default=25.0, ge=0)  # min % above 52-week low
     min_rs_rating: float = Field(default=70.0, ge=0, le=100)  # relative-strength percentile (0-100)
+
+    @field_validator("universe")
+    @classmethod
+    def _valid_universe(cls, v: str) -> str:
+        return v if v in ("full", "curated") else "full"
 
     @property
     def max_price(self) -> float:

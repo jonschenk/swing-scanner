@@ -23,22 +23,13 @@ import yfinance as yf
 from .config import ScanSettings
 from .indicators import adx, atr, rsi, sma
 from .risk import position_plan
+from .universe import load_universe
 
 log = logging.getLogger(__name__)
 
-TICKERS_PATH = Path(__file__).parent / "tickers.txt"
 BATCH_SIZE = 100
-HISTORY_PERIOD = "2y"  # need ~1yr+ for 200-SMA, its slope, and 6-month momentum
+HISTORY_PERIOD = "1y"  # ~252 bars: enough for 200-SMA, its slope, and 6-month momentum
 MIN_BARS = 220  # enough for 200-SMA + a month of slope
-
-
-def load_universe() -> list[str]:
-    tickers = []
-    for line in TICKERS_PATH.read_text().splitlines():
-        symbol = line.strip().upper()
-        if symbol and not symbol.startswith("#"):
-            tickers.append(symbol)
-    return sorted(set(tickers))
 
 
 def _extract(data: pd.DataFrame, ticker: str) -> Optional[pd.DataFrame]:
@@ -168,18 +159,20 @@ def scan_market(
 ) -> list[dict]:
     """Blocking scan over the whole universe. Run in a worker thread.
 
-    Two phases: (1) download everything and compute each name's momentum, then
-    rank momentum across the whole universe into a 0-100 relative-strength
-    rating; (2) apply the full filter set using that rating."""
-    tickers = load_universe()
+    Two phases: (1) download everything and compute each name's momentum (the
+    relative-strength rating is its percentile across the WHOLE universe), while
+    retaining only liquid/affordable names for detailed evaluation; (2) apply the
+    full filter set using that rating, and keep the top-N setups."""
+    tickers = load_universe(settings.universe)
     total = len(tickers)
-    frames: dict[str, pd.DataFrame] = {}
-    momentum: dict[str, float] = {}
+    scope = "full US market" if settings.universe == "full" else "curated list"
+    frames: dict[str, pd.DataFrame] = {}  # only liquid/affordable names (bounds memory)
+    momentum: dict[str, float] = {}  # every valid name, for a market-wide RS rating
 
-    # --- phase 1: download + momentum ---
+    # --- phase 1: download, momentum, cheap pre-gate ---
     for start in range(0, total, BATCH_SIZE):
         batch = tickers[start : start + BATCH_SIZE]
-        progress(f"Downloading market data… {min(start + BATCH_SIZE, total)}/{total} tickers")
+        progress(f"Scanning {scope}: downloaded {min(start + BATCH_SIZE, total)}/{total} tickers…")
         try:
             data = yf.download(
                 batch,
@@ -207,8 +200,15 @@ def scan_market(
                 mom = _blended_momentum(df["Close"])
                 if mom is None:
                     continue
-                frames[ticker] = df
-                momentum[ticker] = mom
+                momentum[ticker] = mom  # ranked across the whole universe
+
+                # Cheap liquidity/price pre-gate: only keep frames worth fully
+                # evaluating. Drops the long tail of sub-$15 / illiquid names so
+                # we don't hold thousands of DataFrames in memory.
+                price = float(df["Close"].iloc[-1])
+                avg_vol = float(df["Volume"].tail(21).mean())
+                if price > settings.min_price and price <= settings.max_price and avg_vol > settings.min_avg_volume:
+                    frames[ticker] = df
             except Exception:
                 log.exception("Failed preparing %s", ticker)
 
@@ -219,8 +219,8 @@ def scan_market(
     mom_series = pd.Series(momentum)
     rs_ratings = (mom_series.rank(pct=True) * 100).round(1).to_dict()
 
-    # --- phase 2: apply filters ---
-    progress(f"Ranking {len(frames)} stocks and applying filters…")
+    # --- phase 2: full filter set on the liquid subset ---
+    progress(f"Ranking {len(momentum)} stocks, evaluating {len(frames)} liquid candidates…")
     results: list[dict] = []
     for ticker, df in frames.items():
         try:
@@ -231,4 +231,7 @@ def scan_market(
             log.exception("Failed evaluating %s", ticker)
 
     results.sort(key=lambda r: r["setup_score"], reverse=True)
+    if len(results) > settings.max_results:
+        progress(f"{len(results)} setups found — keeping the top {settings.max_results}")
+        results = results[: settings.max_results]
     return results

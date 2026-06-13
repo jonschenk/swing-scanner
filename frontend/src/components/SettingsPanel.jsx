@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getSettings, saveSettings } from "../api.js";
 
 const FIELDS = {
+  scan: [{ key: "max_results", label: "Max setups to show", min: 1, step: 5, max: 200 }],
   account: [
     { key: "capital", label: "Capital ($)", min: 1, step: 100 },
     { key: "risk_pct", label: "Risk per trade (%)", min: 0.1, step: 0.5, max: 100 },
@@ -38,7 +39,7 @@ export default function SettingsPanel({ onClose }) {
 
   const onSave = async () => {
     setStatus("");
-    const payload = {};
+    const payload = { universe: form.universe };
     for (const group of Object.values(FIELDS)) {
       for (const f of group) payload[f.key] = Number(form[f.key]);
     }
@@ -83,6 +84,33 @@ export default function SettingsPanel({ onClose }) {
           <p className="muted">{status || "Loading…"}</p>
         ) : (
           <>
+            <h3 className="group-title">Scan Scope</h3>
+            <div className="field">
+              <span>Universe</span>
+              <div className="seg">
+                <button
+                  type="button"
+                  className={`seg-btn ${form.universe === "full" ? "active" : ""}`}
+                  onClick={() => setForm({ ...form, universe: "full" })}
+                >
+                  Full US market
+                </button>
+                <button
+                  type="button"
+                  className={`seg-btn ${form.universe === "curated" ? "active" : ""}`}
+                  onClick={() => setForm({ ...form, universe: "curated" })}
+                >
+                  Curated list
+                </button>
+              </div>
+            </div>
+            <p className="hint">
+              {form.universe === "full"
+                ? "Scans every US common stock (~5,900 names). Finds the most setups but takes ~3 minutes."
+                : "Scans the built-in S&P 500 + hand-picked movers (~675 names). Fast (~20s), works offline."}
+            </p>
+            {FIELDS.scan.map(renderField)}
+
             <h3 className="group-title">Account &amp; Risk</h3>
             {FIELDS.account.map(renderField)}
 

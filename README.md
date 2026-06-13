@@ -128,9 +128,14 @@ The Electron app reuses an already-running backend if one is listening on 8765, 
 3. Click **Copy** on a card and paste the ticker into ThinkorSwim.
 4. Adjust max price, volume floor, min price, and RSI threshold in **Settings** — saved to `backend/settings.json`.
 
-## Customizing the universe
+## Scan universe
 
-The scan list lives in [backend/app/tickers.txt](backend/app/tickers.txt) — ~685 names: the full S&P 500 **plus** a curated set of liquid mid/small-caps and momentum names (fintech, semis, EV/clean energy, biotech, China ADRs, etc.) where a small account actually finds movers. One symbol per line, Yahoo format (`BRK-B` not `BRK.B`), `#` for comments. Add your own watchlist freely — the scanner handles any list size (downloads in batches of 100) and silently skips invalid symbols.
+Two modes, switchable in **Settings → Scan Scope**:
+
+- **Full US market (default)** — dynamically pulls *every* US common stock (~5,900 names) from the [NASDAQ Trader symbol directory](https://www.nasdaqtrader.com/trader.aspx?id=symboldirdefs), filtering out ETFs, warrants, rights, units, preferreds, and test issues. This is what finds the small/mid-cap movers that curated lists miss. The relative-strength rank is computed across this whole universe, so it's a *true* market-wide RS rating. The symbol list is cached for 7 days; a full scan takes ~3 minutes (downloading price history for thousands of names is the bottleneck).
+- **Curated (~675 names)** — the built-in S&P 500 + hand-picked movers in [backend/app/tickers.txt](backend/app/tickers.txt). Fast (~20s), works fully offline, and the automatic fallback if the live symbol fetch ever fails.
+
+Either way, the **Max setups** setting caps how many top-ranked results are kept and sent to the AI (default 30), so a full-market scan stays responsive. To customize the curated list, edit `tickers.txt` — one symbol per line, Yahoo format (`BRK-B` not `BRK.B`), `#` for comments; invalid symbols are skipped silently.
 
 ## Project structure
 

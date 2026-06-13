@@ -118,6 +118,18 @@ export default function App() {
               ≤ ${settings.max_price?.toLocaleString()}/share
             </span>
           )}
+          {settings && (
+            <span
+              className="universe-chip"
+              title={
+                settings.universe === "full"
+                  ? "Scanning the full US market (~5,900 stocks). Change in Settings."
+                  : "Scanning the curated list (~675 stocks). Change in Settings."
+              }
+            >
+              {settings.universe === "full" ? "🌐 Full market" : "★ Curated"}
+            </span>
+          )}
           <button className="btn ghost" onClick={() => setShowSettings(true)}>
             Settings
           </button>

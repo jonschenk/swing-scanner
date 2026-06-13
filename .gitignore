@@ -22,3 +22,6 @@ electron/build/icon.iconset/
 
 # local editor/agent config
 .claude/
+
+# generated full-market universe cache
+backend/app/universe_cache.txt
