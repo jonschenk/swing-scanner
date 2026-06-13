@@ -56,7 +56,7 @@ export default function App() {
     try {
       const state = await getScanStatus();
       setScan(state);
-      if (state.status !== "running") stopPolling();
+      if (state.status !== "running" && state.status !== "analyzing") stopPolling();
     } catch (e) {
       setError(e.message);
       stopPolling();
@@ -77,7 +77,7 @@ export default function App() {
         await refreshSettings();
         const state = await getScanStatus();
         setScan(state);
-        if (state.status === "running") beginPolling();
+        if (state.status === "running" || state.status === "analyzing") beginPolling();
       } catch {
         setBackendUp(false);
       }
@@ -85,15 +85,17 @@ export default function App() {
     return stopPolling;
   }, [beginPolling, refreshSettings]);
 
-  const running = scan.status === "running";
+  const running = scan.status === "running"; // downloading + filtering (no cards yet)
+  const analyzing = scan.status === "analyzing"; // cards shown, AI streaming in
+  const busy = running || analyzing;
 
-  // Live elapsed clock — only ticks while a scan is running.
+  // Live elapsed clock — ticks while the scan or AI phase is working.
   useEffect(() => {
-    if (!running) return;
+    if (!busy) return;
     setNow(Date.now() / 1000);
     const id = setInterval(() => setNow(Date.now() / 1000), 1000);
     return () => clearInterval(id);
-  }, [running]);
+  }, [busy]);
 
   // Auto-refresh the loaded setups every few minutes (cheap: only the displayed
   // tickers, no AI, no re-scan). Active only when a finished scan has results.
@@ -141,7 +143,10 @@ export default function App() {
   };
 
   const results = scan.results ?? [];
-  const elapsed = running && scan.started_at ? now - scan.started_at : 0;
+  const elapsed = busy && scan.started_at ? now - scan.started_at : 0;
+  const analyzedCount = results.filter((r) => r.ai).length;
+  const scanDuration =
+    scan.started_at && scan.scanned_at ? scan.scanned_at - scan.started_at : null;
   const loadDuration =
     scan.status === "done" && scan.started_at && scan.finished_at
       ? scan.finished_at - scan.started_at
@@ -190,9 +195,9 @@ export default function App() {
           <button className="btn ghost" onClick={() => setShowSettings(true)}>
             Settings
           </button>
-          <button className="btn primary" onClick={onRunScan} disabled={running || backendUp === false}>
-            {running ? <span className="spinner" /> : null}
-            {running ? "Scanning…" : "Run Scan"}
+          <button className="btn primary" onClick={onRunScan} disabled={busy || backendUp === false}>
+            {busy ? <span className="spinner" /> : null}
+            {running ? "Scanning…" : analyzing ? "Analyzing…" : "Run Scan"}
           </button>
         </div>
       </header>
@@ -204,7 +209,7 @@ export default function App() {
       )}
       {error && <div className="banner error">{error}</div>}
 
-      {running && (
+      {busy && (
         <div className="banner progress">
           <span className="spinner" />
           <span>{scan.progress || "Scanning…"}</span>
@@ -214,7 +219,14 @@ export default function App() {
 
       {scan.status === "error" && <div className="banner error">Scan failed: {scan.error}</div>}
 
-      {!running && scan.status === "done" && results.length > 0 && (
+      {analyzing && results.length > 0 && (
+        <div className="scan-meta muted small">
+          {scanDuration != null && <span>Found {results.length} setups in {formatDuration(scanDuration)}</span>}
+          <span> · <span className="spinner tiny" /> AI analyzing {analyzedCount}/{results.length}…</span>
+        </div>
+      )}
+
+      {scan.status === "done" && results.length > 0 && (
         <div className="scan-meta muted small">
           {loadDuration != null && <span>Loaded {results.length} setups in {formatDuration(loadDuration)}</span>}
           {lastUpdated && <span> · updated {formatClock(lastUpdated)}</span>}

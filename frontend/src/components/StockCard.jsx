@@ -29,6 +29,7 @@ export default function StockCard({ stock }) {
   const [copied, setCopied] = useState(false);
   const ai = stock.ai ?? {};
   const plan = stock.plan ?? {};
+  const analyzing = !stock.ai; // technicals loaded, AI not back yet
   const sentiment = ai.sentiment ?? "Neutral";
 
   const copyTicker = async () => {
@@ -55,10 +56,16 @@ export default function StockCard({ stock }) {
           </button>
         </div>
         <div className="head-badges">
-          <span className="score" title="Setup score: trend strength + pullback depth + volatility">
+          <span className="score" title="Setup score: relative strength + trend + pullback + volatility">
             {stock.setup_score}
           </span>
-          <span className={`badge sentiment-${sentiment.toLowerCase()}`}>{sentiment}</span>
+          {analyzing ? (
+            <span className="badge analyzing">
+              <span className="spinner tiny" /> Analyzing
+            </span>
+          ) : (
+            <span className={`badge sentiment-${sentiment.toLowerCase()}`}>{sentiment}</span>
+          )}
         </div>
       </div>
 
@@ -129,19 +136,25 @@ export default function StockCard({ stock }) {
         </div>
       </div>
 
-      <p className={`summary ${ai.error ? "muted" : ""}`}>{ai.summary ?? "Awaiting AI analysis…"}</p>
+      <p className={`summary ${analyzing ? "summary-pending" : ai.error ? "muted" : ""}`}>
+        {analyzing ? "Awaiting AI analysis…" : ai.summary}
+      </p>
 
-      {ai.risks_catalysts && (
+      {!analyzing && ai.risks_catalysts && (
         <p className="risks">
           <span className="risks-label">Risks / Catalysts:</span> {ai.risks_catalysts}
         </p>
       )}
 
       <div className="card-foot">
-        <span className={`badge confidence-${(ai.confidence ?? "low").toLowerCase()}`}>
-          {ai.confidence ?? "—"} confidence
-        </span>
-        {typeof ai.news_count === "number" && (
+        {analyzing ? (
+          <span className="muted small">AI analysis pending…</span>
+        ) : (
+          <span className={`badge confidence-${(ai.confidence ?? "low").toLowerCase()}`}>
+            {ai.confidence ?? "—"} confidence
+          </span>
+        )}
+        {!analyzing && typeof ai.news_count === "number" && (
           <span className="muted small">{ai.news_count} news items</span>
         )}
       </div>

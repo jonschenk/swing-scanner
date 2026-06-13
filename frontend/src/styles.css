@@ -336,6 +336,31 @@ body {
   color: var(--gray);
 }
 
+.badge.analyzing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(91, 140, 255, 0.1);
+  color: var(--accent-hover);
+  border: 1px solid rgba(91, 140, 255, 0.3);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.summary-pending {
+  color: var(--text-muted);
+  font-style: italic;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 /* ---------- stats ---------- */
 .head-badges {
   display: flex;

@@ -32,11 +32,12 @@ app.add_middleware(
 )
 
 scan_state: dict = {
-    "status": "idle",  # idle | running | done | error
+    "status": "idle",  # idle | running | analyzing | done | error
     "progress": "",
     "results": [],
     "started_at": None,  # epoch seconds the current/last scan began
-    "finished_at": None,  # epoch seconds it completed
+    "scanned_at": None,  # epoch seconds the technical scan finished (cards available)
+    "finished_at": None,  # epoch seconds AI analysis completed
     "refreshed_at": None,  # epoch seconds of the last lightweight refresh
     "refreshing": False,
     "error": None,
@@ -53,9 +54,15 @@ async def _run_scan() -> None:
     try:
         _set_progress("Starting scan…")
         candidates = await asyncio.to_thread(scan_market, settings, _set_progress)
-        _set_progress(f"{len(candidates)} stocks passed the scan")
-        await analyze_all(candidates, _set_progress)
+        # Publish the technical results immediately — the cards show right away
+        # with "awaiting AI" placeholders, and analyze_all fills in each card's
+        # analysis in place (the dicts are the same objects polled via /status).
         scan_state["results"] = candidates
+        scan_state["scanned_at"] = time.time()
+        if candidates:
+            scan_state["status"] = "analyzing"
+            _set_progress(f"{len(candidates)} setups found — running AI analysis…")
+            await analyze_all(candidates, _set_progress)
         scan_state["status"] = "done"
         scan_state["finished_at"] = time.time()
         _set_progress(f"Scan complete — {len(candidates)} matches")
@@ -102,7 +109,9 @@ async def start_scan() -> dict:
         status="running",
         progress="Queued…",
         error=None,
+        results=[],
         started_at=time.time(),
+        scanned_at=None,
         finished_at=None,
         refreshed_at=None,
     )
