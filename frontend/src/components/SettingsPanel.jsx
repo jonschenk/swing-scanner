@@ -5,6 +5,7 @@ const FIELDS = {
   scan: [
     { key: "max_results", label: "Max setups to show", min: 1, step: 5, max: 200 },
     { key: "ai_top_n", label: "Auto-analyze top N (rest on-demand)", min: 1, step: 5, max: 200 },
+    { key: "cache_minutes", label: "Reuse cached prices for (min, 0 = off)", min: 0, step: 5, max: 1440 },
   ],
   account: [
     { key: "capital", label: "Capital ($)", min: 1, step: 100 },

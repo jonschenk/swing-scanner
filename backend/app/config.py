@@ -13,6 +13,7 @@ class ScanSettings(BaseModel):
     universe: str = Field(default="full")  # "full" (whole US market) or "curated" (tickers.txt)
     max_results: int = Field(default=30, ge=1, le=200)  # top-N setups to keep
     ai_top_n: int = Field(default=10, ge=1, le=200)  # auto-analyze top-N; rest are on-demand
+    cache_minutes: int = Field(default=30, ge=0, le=1440)  # reuse cached prices this long (0 = off)
 
     # --- account & risk ---
     capital: float = Field(default=1000.0, gt=0)  # your trading capital ($)

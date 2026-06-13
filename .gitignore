@@ -25,3 +25,7 @@ electron/build/icon.iconset/
 
 # generated full-market universe cache
 backend/app/universe_cache.txt
+
+# generated price cache
+backend/app/price_cache.pkl
+backend/app/price_cache.json

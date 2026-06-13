@@ -151,10 +151,10 @@ export default function App() {
     }
   }, []);
 
-  const onRunScan = async () => {
+  const onRunScan = async (fresh = false) => {
     setError(null);
     try {
-      await startScan();
+      await startScan(fresh);
       setScan((s) => ({ ...s, status: "running", progress: "Starting scan…", started_at: Date.now() / 1000 }));
       beginPolling();
     } catch (e) {
@@ -215,7 +215,15 @@ export default function App() {
           <button className="btn ghost" onClick={() => setShowSettings(true)}>
             Settings
           </button>
-          <button className="btn primary" onClick={onRunScan} disabled={busy || backendUp === false}>
+          <button
+            className="btn ghost"
+            onClick={() => onRunScan(true)}
+            disabled={busy || backendUp === false}
+            title="Force a full re-download of fresh prices (ignore the cache)"
+          >
+            ↻ Fresh
+          </button>
+          <button className="btn primary" onClick={() => onRunScan(false)} disabled={busy || backendUp === false}>
             {busy ? <span className="spinner" /> : null}
             {running ? "Scanning…" : analyzing ? "Analyzing…" : "Run Scan"}
           </button>
@@ -249,6 +257,7 @@ export default function App() {
       {scan.status === "done" && results.length > 0 && (
         <div className="scan-meta muted small">
           {loadDuration != null && <span>Loaded {results.length} setups in {formatDuration(loadDuration)}</span>}
+          {scan.from_cache && <span className="cache-tag"> · ⚡ cached prices</span>}
           {lastUpdated && <span> · updated {formatClock(lastUpdated)}</span>}
           {scan.refreshing ? (
             <span className="refreshing"> · <span className="spinner tiny" /> refreshing…</span>

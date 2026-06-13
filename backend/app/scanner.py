@@ -20,6 +20,7 @@ from typing import Callable, Optional
 import pandas as pd
 import yfinance as yf
 
+from . import price_cache
 from .config import ScanSettings
 from .indicators import adx, atr, rsi, sma
 from .risk import position_plan
@@ -183,20 +184,36 @@ def recompute_row(
 def scan_market(
     settings: ScanSettings,
     progress: Callable[[str], None] = lambda msg: None,
+    force_fresh: bool = False,
 ) -> list[dict]:
     """Blocking scan over the whole universe. Run in a worker thread.
 
-    Two phases: (1) download everything and compute each name's momentum (the
-    relative-strength rating is its percentile across the WHOLE universe), while
-    retaining only liquid/affordable names for detailed evaluation; (2) apply the
-    full filter set using that rating, and keep the top-N setups."""
-    tickers = load_universe(settings.universe)
-    total = len(tickers)
-    scope = "full US market" if settings.universe == "full" else "curated list"
-    frames: dict[str, pd.DataFrame] = {}  # only liquid/affordable names (bounds memory)
-    momentum: dict[str, float] = {}  # every valid name, for a market-wide RS rating
+    Bars come from the on-disk cache when it's fresh enough (instant), else from
+    a full download. Either way EVERY cached ticker is re-evaluated from scratch,
+    so the cache only saves the download — it never decides what passes."""
+    universe = settings.universe
+    if not force_fresh and price_cache.is_fresh(universe, settings.cache_minutes):
+        age = price_cache.age_minutes() or 0
+        progress(f"Using cached prices ({age:.0f} min old) — re-evaluating every stock…")
+        frames_all = price_cache.load()
+    else:
+        frames_all = _download_universe(universe, progress)
+        price_cache.save(frames_all, universe)
 
-    # --- phase 1: download, momentum, cheap pre-gate ---
+    if not frames_all:
+        return []
+    return _evaluate(frames_all, settings, progress)
+
+
+def _download_universe(universe: str, progress) -> dict[str, pd.DataFrame]:
+    """Download bars for the whole universe, returning every VALID ticker's frame
+    (not pre-filtered — the cache must hold all of them so changing a filter can
+    never miss a stock)."""
+    tickers = load_universe(universe)
+    total = len(tickers)
+    scope = "full US market" if universe == "full" else "curated list"
+    frames: dict[str, pd.DataFrame] = {}
+
     for start in range(0, total, BATCH_SIZE):
         batch = tickers[start : start + BATCH_SIZE]
         progress(f"Scanning {scope}: downloaded {min(start + BATCH_SIZE, total)}/{total} tickers…")
@@ -222,34 +239,40 @@ def scan_market(
                 if df is None:
                     continue
                 df = df.dropna(subset=["High", "Low", "Close", "Volume"])
-                if len(df) < MIN_BARS:
-                    continue
-                mom = _blended_momentum(df["Close"])
-                if mom is None:
-                    continue
-                momentum[ticker] = mom  # ranked across the whole universe
-
-                # Cheap liquidity/price pre-gate: only keep frames worth fully
-                # evaluating. Drops the long tail of sub-$15 / illiquid names so
-                # we don't hold thousands of DataFrames in memory.
-                price = float(df["Close"].iloc[-1])
-                avg_vol = float(df["Volume"].tail(21).mean())
-                if price > settings.min_price and price <= settings.max_price and avg_vol > settings.min_avg_volume:
+                if len(df) >= MIN_BARS:
                     frames[ticker] = df
             except Exception:
                 log.exception("Failed preparing %s", ticker)
+    return frames
+
+
+def _evaluate(frames_all: dict[str, pd.DataFrame], settings: ScanSettings, progress) -> list[dict]:
+    """Rank relative strength across the whole universe and apply the full filter
+    set. Runs on every cached/downloaded ticker — nothing is skipped."""
+    momentum: dict[str, float] = {}
+    liquid: dict[str, pd.DataFrame] = {}  # passes the cheap price/volume pre-gate
+
+    for ticker, df in frames_all.items():
+        try:
+            mom = _blended_momentum(df["Close"])
+            if mom is None:
+                continue
+            momentum[ticker] = mom  # ranked across the whole universe
+            price = float(df["Close"].iloc[-1])
+            avg_vol = float(df["Volume"].tail(21).mean())
+            if price > settings.min_price and price <= settings.max_price and avg_vol > settings.min_avg_volume:
+                liquid[ticker] = df
+        except Exception:
+            log.exception("Failed preparing %s", ticker)
 
     if not momentum:
         return []
 
-    # --- relative-strength rating: percentile rank of momentum across universe ---
-    mom_series = pd.Series(momentum)
-    rs_ratings = (mom_series.rank(pct=True) * 100).round(1).to_dict()
+    rs_ratings = (pd.Series(momentum).rank(pct=True) * 100).round(1).to_dict()
+    progress(f"Ranking {len(momentum)} stocks, evaluating {len(liquid)} liquid candidates…")
 
-    # --- phase 2: full filter set on the liquid subset ---
-    progress(f"Ranking {len(momentum)} stocks, evaluating {len(frames)} liquid candidates…")
     results: list[dict] = []
-    for ticker, df in frames.items():
+    for ticker, df in liquid.items():
         try:
             hit = evaluate_ticker(ticker, df, settings, rs_ratings[ticker])
             if hit:

@@ -141,6 +141,12 @@ Two modes, switchable in **Settings → Scan Scope**:
 
 Either way, the **Max setups** setting caps how many top-ranked results are kept and sent to the AI (default 30), so a full-market scan stays responsive. To customize the curated list, edit `tickers.txt` — one symbol per line, Yahoo format (`BRK-B` not `BRK.B`), `#` for comments; invalid symbols are skipped silently.
 
+### Price cache (fast rescans)
+
+A full-market download is the slow part (~3 min). To avoid repeating it, the scanner caches the **raw price bars for the whole universe** on disk and reuses them for a configurable window (Settings → *Reuse cached prices*, default 30 min). When the cache is warm, a rescan finishes in **~1 second** instead of 3 minutes.
+
+The cache is designed so it **can never cause a missed stock**: it stores only the downloaded bars, never which stocks passed. *Every* rescan re-evaluates all ~5,900 tickers from scratch — so changing a filter (RSI, ADX, RS, etc.) instantly re-screens the entire market on cached data and surfaces any newly-qualifying names. The 30-minute window also sidesteps stock-split adjustment drift (splits take effect at the open, so any cache old enough to straddle one is already expired). Hit **↻ Fresh** anytime to force a full re-download, or set the window to 0 to disable caching.
+
 ## Project structure
 
 ```

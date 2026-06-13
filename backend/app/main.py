@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from .ai import analyze_all, analyze_single
 from .config import ScanSettings, load_settings, save_settings
+from . import price_cache
 from .scanner import refresh_results, scan_market
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -41,6 +42,7 @@ scan_state: dict = {
     "finished_at": None,  # epoch seconds AI analysis completed
     "refreshed_at": None,  # epoch seconds of the last lightweight refresh
     "refreshing": False,
+    "from_cache": False,  # whether the last scan reused cached prices
     "error": None,
 }
 
@@ -50,11 +52,14 @@ def _set_progress(message: str) -> None:
     log.info(message)
 
 
-async def _run_scan() -> None:
+async def _run_scan(force_fresh: bool = False) -> None:
     settings = load_settings()
+    scan_state["from_cache"] = (
+        not force_fresh and price_cache.is_fresh(settings.universe, settings.cache_minutes)
+    )
     try:
         _set_progress("Starting scan…")
-        candidates = await asyncio.to_thread(scan_market, settings, _set_progress)
+        candidates = await asyncio.to_thread(scan_market, settings, _set_progress, force_fresh)
         # Publish the technical results immediately — the cards show right away
         # with "awaiting AI" placeholders, and analyze_all fills in each card's
         # analysis in place (the dicts are the same objects polled via /status).
@@ -103,7 +108,7 @@ async def update_settings(settings: ScanSettings) -> dict:
 
 
 @app.post("/api/scan", status_code=202)
-async def start_scan() -> dict:
+async def start_scan(fresh: bool = False) -> dict:
     if scan_state["status"] == "running":
         raise HTTPException(status_code=409, detail="A scan is already running")
     scan_state.update(
@@ -116,7 +121,7 @@ async def start_scan() -> dict:
         finished_at=None,
         refreshed_at=None,
     )
-    asyncio.create_task(_run_scan())
+    asyncio.create_task(_run_scan(force_fresh=fresh))
     return {"status": "running"}
 
 
