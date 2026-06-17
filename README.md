@@ -19,6 +19,7 @@ It's made for finding and researching trades, not placing them. Each card has a 
 - A bulk price/volume pre-screen and a smart price cache keep things quick: a full cold scan runs in about a minute, and re-running or tweaking a filter is near-instant off the cache.
 - Adjustable filters for price, volume, RSI, trend strength, and more.
 - Send the results to ThinkorSwim as a watchlist, by clipboard or a .csv file.
+- Optional live prices: stream the displayed setups in real time, free and with no API key.
 - Runs on macOS and Windows.
 
 ![A single setup card](docs/screenshots/stock-card.png)
@@ -56,6 +57,10 @@ Once a scan finishes you can push the whole list into a ThinkorSwim watchlist in
 - Or click "Export .csv" and import that file from the same watchlist Import menu.
 
 Class shares are converted to the dot format ThinkorSwim expects (so BRK-B becomes BRK.B). The per-card copy button is still there for one-off tickers.
+
+## Live prices
+
+The scan itself works on daily bars, but once results are showing you can flip on "Live prices" to stream the displayed cards in real time. Each card's price then updates every few seconds and turns green or red with the day's move. It uses Yahoo's free price stream, so there's no API key and nothing to sign up for. Heavily traded names tick more often than thin ones, and it only streams the cards on screen, not the whole market.
 
 ## Setup
 

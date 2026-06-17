@@ -31,8 +31,15 @@ function money(v) {
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function StockCard({ stock, onAnalyze }) {
+export default function StockCard({ stock, onAnalyze, live }) {
   const [copied, setCopied] = useState(false);
+  const livePrice = live && typeof live.price === "number" ? live.price : null;
+  const liveDir =
+    live && typeof live.change_percent === "number"
+      ? live.change_percent >= 0
+        ? "up"
+        : "down"
+      : "";
   const ai = stock.ai ?? {};
   const plan = stock.plan ?? {};
   const hasAi = !!stock.ai;
@@ -91,8 +98,13 @@ export default function StockCard({ stock, onAnalyze }) {
 
       <div className="stats">
         <div className="stat">
-          <span className="stat-label">Price</span>
-          <span className="stat-value">${money(stock.price)}</span>
+          <span className="stat-label">
+            Price
+            {livePrice != null && <span className="live-dot on" title="Live price" />}
+          </span>
+          <span className={`stat-value ${livePrice != null ? `live-price ${liveDir}` : ""}`}>
+            ${money(livePrice != null ? livePrice : stock.price)}
+          </span>
         </div>
         <div className="stat">
           <span

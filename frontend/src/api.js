@@ -27,3 +27,6 @@ export const analyzeTicker = (ticker) =>
   request("/api/analyze", { method: "POST", body: JSON.stringify({ ticker }) });
 export const getScanStatus = () => request("/api/scan/status");
 export const getHealth = () => request("/api/health");
+export const startLive = () => request("/api/live/start", { method: "POST" });
+export const stopLive = () => request("/api/live/stop", { method: "POST" });
+export const getLivePrices = () => request("/api/live");

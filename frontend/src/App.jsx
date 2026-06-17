@@ -7,12 +7,16 @@ import {
   startScan,
   refreshScan,
   analyzeTicker,
+  startLive,
+  stopLive,
+  getLivePrices,
 } from "./api.js";
 import StockCard from "./components/StockCard.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
 
 const POLL_INTERVAL_MS = 1500;
 const REFRESH_INTERVAL_MS = 180_000; // auto-refresh loaded setups every 3 min
+const LIVE_POLL_INTERVAL_MS = 4000; // pull the latest streamed prices from our backend
 
 function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -39,7 +43,10 @@ export default function App() {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now() / 1000); // ticks each second while running
   const [exportNote, setExportNote] = useState(""); // transient "copied"/"saved" confirmation
+  const [liveOn, setLiveOn] = useState(false); // streaming live prices for displayed cards
+  const [livePrices, setLivePrices] = useState({}); // ticker -> {price, change_percent}
   const pollRef = useRef(null);
+  const liveRef = useRef(null);
   const refreshingRef = useRef(false);
 
   const stopPolling = () => {
@@ -204,6 +211,54 @@ export default function App() {
     flashExportNote(`Saved ${syms.length} tickers`);
   };
 
+  // Signature of the tickers on screen — re-subscribe the stream when it changes.
+  const tickerKey = results.map((r) => r.ticker).join(",");
+
+  // Stream live prices for the displayed cards: subscribe the backend to them,
+  // then poll the latest streamed prices over localhost while live mode is on.
+  useEffect(() => {
+    const stopLivePolling = () => {
+      if (liveRef.current) {
+        clearInterval(liveRef.current);
+        liveRef.current = null;
+      }
+    };
+    if (!liveOn || scan.status !== "done" || !tickerKey) {
+      stopLivePolling();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        await startLive();
+        const pull = async () => {
+          try {
+            const prices = await getLivePrices();
+            if (!cancelled) setLivePrices(prices);
+          } catch {
+            /* transient; keep the last values */
+          }
+        };
+        await pull();
+        liveRef.current = setInterval(pull, LIVE_POLL_INTERVAL_MS);
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopLivePolling();
+    };
+  }, [liveOn, tickerKey, scan.status]);
+
+  // Turning live off: drop the backend stream and clear the displayed prices.
+  useEffect(() => {
+    if (!liveOn) {
+      stopLive().catch(() => {});
+      setLivePrices({});
+    }
+  }, [liveOn]);
+
   const elapsed = busy && scan.started_at ? now - scan.started_at : 0;
   const analyzedCount = results.filter((r) => r.ai).length;
   // Only the top-N setups are auto-analyzed; the rest are on-demand. Cap the
@@ -320,6 +375,14 @@ export default function App() {
             Export .csv
           </button>
           {exportNote && <span className="export-note muted small">{exportNote} ✓</span>}
+          <button
+            className={`btn export live-toggle ${liveOn ? "on" : ""}`}
+            onClick={() => setLiveOn((on) => !on)}
+            title="Stream live prices for these cards from Yahoo (free, no key). Updates every few seconds."
+          >
+            <span className={`live-dot ${liveOn ? "on" : ""}`} />
+            {liveOn ? "Live prices on" : "Live prices off"}
+          </button>
         </div>
       )}
 
@@ -345,7 +408,12 @@ export default function App() {
 
         <div className="grid">
           {results.map((stock) => (
-            <StockCard key={stock.ticker} stock={stock} onAnalyze={onAnalyze} />
+            <StockCard
+              key={stock.ticker}
+              stock={stock}
+              onAnalyze={onAnalyze}
+              live={liveOn ? livePrices[stock.ticker] : null}
+            />
           ))}
         </div>
       </main>

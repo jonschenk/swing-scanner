@@ -250,6 +250,50 @@ body {
   color: var(--green);
 }
 
+.btn.export.live-toggle {
+  margin-left: auto;
+}
+
+.btn.export.live-toggle.on {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  vertical-align: middle;
+}
+
+.live-dot.on {
+  background: var(--green);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Live price on a card: a small pulsing dot by the label, color by day direction. */
+.stat-label .live-dot {
+  width: 6px;
+  height: 6px;
+  margin: 0 0 0 5px;
+}
+
+.stat-value.live-price.up {
+  color: var(--green);
+}
+
+.stat-value.live-price.down {
+  color: var(--red);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

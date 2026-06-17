@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from .ai import analyze_all, analyze_single
 from .config import ScanSettings, load_settings, save_settings
 from . import price_cache
+from .live import live
 from .scanner import refresh_results, scan_market
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -168,3 +169,28 @@ async def analyze_one(req: AnalyzeRequest) -> dict:
 @app.get("/api/scan/status")
 async def scan_status() -> dict:
     return scan_state
+
+
+@app.post("/api/live/start")
+async def live_start() -> dict:
+    """Stream live prices for the currently displayed setups (Yahoo websocket)."""
+    tickers = [r["ticker"] for r in (scan_state.get("results") or [])]
+    count = await live.set_symbols(tickers)
+    return {"streaming": count > 0, "count": count}
+
+
+@app.post("/api/live/stop")
+async def live_stop() -> dict:
+    await live.stop()
+    return {"streaming": False}
+
+
+@app.get("/api/live")
+async def live_prices() -> dict:
+    """Latest streamed price per ticker: {ticker: {price, change_percent, time}}."""
+    return live.prices()
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    await live.stop()
