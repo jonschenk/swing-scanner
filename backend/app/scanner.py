@@ -367,6 +367,8 @@ def refresh_results(settings: ScanSettings, prior_results: list[dict]) -> list[d
                     row["ai_status"] = prior["ai_status"]
                 if prior.get("trade_case"):  # preserve an on-demand deep analysis
                     row["trade_case"] = prior["trade_case"]
+                if prior.get("recommendation"):  # preserve a batch-triage recommendation
+                    row["recommendation"] = prior["recommendation"]
                 updated.append(row)
 
     updated.sort(key=lambda r: r["setup_score"], reverse=True)

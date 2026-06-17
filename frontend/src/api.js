@@ -27,6 +27,8 @@ export const analyzeTicker = (ticker) =>
   request("/api/analyze", { method: "POST", body: JSON.stringify({ ticker }) });
 export const deepAnalyze = (ticker, positions = []) =>
   request("/api/trade-case", { method: "POST", body: JSON.stringify({ ticker, positions }) });
+export const getRecommendations = (positions = [], top_n = 12) =>
+  request("/api/recommend", { method: "POST", body: JSON.stringify({ positions, top_n }) });
 export const getScanStatus = () => request("/api/scan/status");
 export const getHealth = () => request("/api/health");
 export const getPaperAccount = () => request("/api/paper/account");

@@ -21,6 +21,7 @@ from . import paper
 from .live import live
 from .scanner import refresh_results, scan_market
 from .trade_case import trade_case
+from .recommend import recommend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -183,6 +184,36 @@ async def trade_case_one(req: TradeCaseRequest) -> dict:
     stock["tc_status"] = "pending"
     stock["trade_case"] = await trade_case(stock, load_settings(), req.positions or None)
     stock.pop("tc_status", None)
+    return scan_state
+
+
+class RecommendRequest(BaseModel):
+    positions: list[dict] = []
+    top_n: int = 12
+
+
+@app.post("/api/recommend")
+async def recommend_one(req: RecommendRequest) -> dict:
+    """Triage the current scan's top-N setups into a ranked shortlist (one Claude pass)."""
+    rows = scan_state.get("results") or []
+    if not rows:
+        raise HTTPException(status_code=400, detail="No scan results to recommend from")
+    candidates = rows[: max(1, req.top_n)]  # already sorted by setup_score
+    result = await recommend(candidates, load_settings(), req.positions or None)
+
+    for r in rows:  # clear any prior pass
+        r.pop("recommendation", None)
+    if not result.get("error"):
+        for p in result.get("picks", []):
+            row = next((r for r in rows if r["ticker"] == p["ticker"]), None)
+            if row:
+                row["recommendation"] = {k: p.get(k) for k in ("rank", "call", "reason", "conviction")}
+    scan_state["recommendation"] = {
+        "summary": result.get("summary", ""),
+        "skip_note": result.get("skip_note", ""),
+        "error": result.get("error", False),
+        "_meta": result.get("_meta"),
+    }
     return scan_state
 
 

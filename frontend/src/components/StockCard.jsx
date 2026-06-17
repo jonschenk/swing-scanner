@@ -37,6 +37,7 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
   const [showCase, setShowCase] = useState(false); // expanded deep-analysis details
   const tc = stock.trade_case;
   const tcPending = stock.tc_status === "pending";
+  const rec = stock.recommendation; // batch-triage pick: {rank, call, reason, conviction}
   const livePrice = live && typeof live.price === "number" ? live.price : null;
   const liveDir =
     live && typeof live.change_percent === "number"
@@ -63,10 +64,16 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
 
   return (
     <article
-      className={`card ${copied ? "card-copied" : ""}`}
+      className={`card ${copied ? "card-copied" : ""} ${rec ? "card-recommended" : ""}`}
       onClick={copyTicker}
       title="Click anywhere to copy the ticker"
     >
+      {rec && (
+        <div className="rec-strip">
+          <span className="rec-badge">★ Pick #{rec.rank} · {rec.call}</span>
+          <span className="rec-card-reason">{rec.reason}</span>
+        </div>
+      )}
       <div className="card-head">
         <div className="ticker-row">
           <div className="ticker-block">

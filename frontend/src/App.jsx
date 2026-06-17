@@ -8,6 +8,7 @@ import {
   refreshScan,
   analyzeTicker,
   deepAnalyze,
+  getRecommendations,
   startLive,
   stopLive,
   getLivePrices,
@@ -75,6 +76,7 @@ export default function App() {
   const [showHoldings, setShowHoldings] = useState(false);
   const [paper, setPaper] = useState(null); // paper account snapshot (cash/equity/positions)
   const [showPaper, setShowPaper] = useState(false);
+  const [recommending, setRecommending] = useState(false); // batch-triage in flight
   const [liveOn, setLiveOn] = useState(true); // streaming live prices for displayed cards (on by default)
   const [livePrices, setLivePrices] = useState({}); // ticker -> {price, change_percent}
   const pollRef = useRef(null);
@@ -219,6 +221,20 @@ export default function App() {
     [holdings],
   );
 
+  // Batch triage: one Claude pass that ranks the top setups vs. your account/holdings.
+  const onRecommend = async () => {
+    setRecommending(true);
+    setError(null);
+    try {
+      const state = await getRecommendations(parseHoldings(holdings), 12);
+      setScan(state);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setRecommending(false);
+    }
+  };
+
   // Poll the paper account so positions mark to market and bracket fills show up.
   useEffect(() => {
     let alive = true;
@@ -283,6 +299,10 @@ export default function App() {
 
   const results = scan.results ?? [];
   const heldTickers = new Set((paper?.positions || []).map((p) => p.ticker));
+  // Float recommended picks to the top (by rank); everything else keeps setup-score order.
+  const displayResults = [...results].sort(
+    (a, b) => (a.recommendation?.rank ?? Infinity) - (b.recommendation?.rank ?? Infinity),
+  );
 
   const flashExportNote = (msg) => {
     setExportNote(msg);
@@ -475,6 +495,18 @@ export default function App() {
 
       {scan.status === "done" && results.length > 0 && (
         <div className="export-bar">
+          <button
+            className="btn export recommend-btn"
+            disabled={recommending}
+            onClick={onRecommend}
+            title="One Claude pass that ranks the top setups against your account and holdings"
+          >
+            {recommending ? (
+              <><span className="spinner tiny" /> Picking…</>
+            ) : (
+              <>✨ Recommend top picks</>
+            )}
+          </button>
           {/* ThinkorSwim export disabled for now — re-enable by uncommenting.
           <button className="btn export" onClick={copyForToS} title="Copy all tickers for ThinkorSwim's 'Paste symbols from clipboard' import">
             Copy tickers for ThinkorSwim
@@ -506,6 +538,21 @@ export default function App() {
             <span className={`live-dot ${liveOn ? "on" : ""}`} />
             {liveOn ? "Live prices on" : "Live prices off"}
           </button>
+        </div>
+      )}
+
+      {scan.status === "done" && scan.recommendation && (
+        <div className={`rec-banner ${scan.recommendation.error ? "rec-error" : ""}`}>
+          <p className="rec-summary">{scan.recommendation.summary}</p>
+          {scan.recommendation.skip_note && (
+            <p className="rec-skip muted small">Skip: {scan.recommendation.skip_note}</p>
+          )}
+          {scan.recommendation._meta && (
+            <p className="rec-meta muted small">
+              {scan.recommendation._meta.model} · considered top {scan.recommendation._meta.considered} · $
+              {scan.recommendation._meta.cost_usd}
+            </p>
+          )}
         </div>
       )}
 
@@ -604,7 +651,7 @@ export default function App() {
         )}
 
         <div className="grid">
-          {results.map((stock) => (
+          {displayResults.map((stock) => (
             <StockCard
               key={stock.ticker}
               stock={stock}
