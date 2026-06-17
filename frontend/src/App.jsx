@@ -82,6 +82,7 @@ export default function App() {
   const pollRef = useRef(null);
   const liveRef = useRef(null);
   const refreshingRef = useRef(false);
+  const paperAutoOpenedRef = useRef(false); // auto-open the paper book once on launch if holding
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -253,6 +254,15 @@ export default function App() {
       clearInterval(id);
     };
   }, []);
+
+  // On launch, if you already hold open paper positions, open the book automatically
+  // so you see your holdings without having to run a scan first.
+  useEffect(() => {
+    if (!paperAutoOpenedRef.current && paper && (paper.positions?.length ?? 0) > 0) {
+      paperAutoOpenedRef.current = true;
+      setShowPaper(true);
+    }
+  }, [paper]);
 
   const refreshPaper = async () => {
     try {
@@ -438,6 +448,15 @@ export default function App() {
               {settings.universe === "full" ? "🌐 Full market" : "★ Curated"}
             </span>
           )}
+          {paper && (
+            <button
+              className={`btn ghost ${showPaper ? "active" : ""}`}
+              onClick={() => setShowPaper((v) => !v)}
+              title="Your paper account: open positions, live P&L, auto-close at stop/target"
+            >
+              📈 Paper book{paper.positions?.length ? ` (${paper.positions.length})` : ""}
+            </button>
+          )}
           <button className="btn ghost" onClick={() => setShowSettings(true)}>
             Settings
           </button>
@@ -522,13 +541,6 @@ export default function App() {
             title="Your open positions — fed to Deep analysis so it can weigh portfolio fit"
           >
             Holdings{holdings.trim() ? ` (${parseHoldings(holdings).length})` : ""}
-          </button>
-          <button
-            className={`btn export ${showPaper ? "on" : ""}`}
-            onClick={() => setShowPaper((v) => !v)}
-            title="Your paper account: open positions, live P&L, and auto-close at your stop/target"
-          >
-            Paper book{paper?.positions?.length ? ` (${paper.positions.length})` : ""}
           </button>
           <button
             className={`btn export live-toggle ${liveOn ? "on" : ""}`}

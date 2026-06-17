@@ -160,6 +160,11 @@ body {
   background: transparent;
 }
 
+.btn.ghost.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .btn.copy {
   padding: 3px 10px;
   font-size: 12px;
