@@ -44,25 +44,69 @@ def _save(trades: list[dict]) -> None:
     STORE_PATH.write_text(json.dumps(trades, indent=2))
 
 
-def log_trade(ticker: str, variation_id: str, plan: dict, decision: str | None = None, notes: str = "") -> dict:
-    """Record an opened trade, tagged with the variation that produced it."""
+# Indicators snapshotted at entry, so outcomes can be sliced by the entry conditions later
+# ("we win on high-ADX names but bleed in chop"). You can only learn along what you logged.
+ENTRY_SNAPSHOT_FIELDS = [
+    "price", "rsi", "adx", "atr_pct", "rs_rating", "pct_from_high",
+    "rel_volume", "pct_above_sma50", "sma20", "sma50", "sma200", "setup_score",
+]
+# Trade-case fields kept at entry, so the advisor's calls can be graded against outcomes.
+_TRADE_CASE_KEEP = ["recommendation", "conviction", "thesis", "key_risks", "bottom_line"]
+
+
+def _entry_snapshot(stock: dict) -> dict:
+    return {k: stock.get(k) for k in ENTRY_SNAPSHOT_FIELDS}
+
+
+def _trade_case_snapshot(stock: dict) -> dict | None:
+    tc = stock.get("trade_case")
+    if not tc or tc.get("error"):
+        return None
+    return {k: tc.get(k) for k in _TRADE_CASE_KEEP}
+
+
+def log_trade(
+    stock: dict,
+    variation_id: str,
+    variation_params: dict | None = None,
+    decision: str | None = None,
+    notes: str = "",
+    market_regime: str | None = None,
+) -> dict:
+    """Record an opened trade with a rich entry snapshot, so it can be evolved against later.
+    `stock` is a full scanner result row (indicators + plan + optional trade_case)."""
+    plan = stock.get("plan", {})
+    tc = _trade_case_snapshot(stock)
     trades = _load()
     entry = {
         "id": uuid.uuid4().hex[:8],
-        "ticker": ticker,
+        "ticker": stock["ticker"],
+        "name": stock.get("name", ""),
         "variation_id": variation_id,
-        "decision": decision,  # the trade-case call at entry, if any: Take/Wait/Pass
+        "variation_params": variation_params,  # the strategy knobs in effect at entry
+        "decision": decision or (tc.get("recommendation") if tc else None),
         "status": "open",
         "opened_at": _now(),
+        # plan at entry
         "entry": plan.get("entry"),
         "stop": plan.get("stop"),
         "target": plan.get("target"),
         "shares": plan.get("shares"),
         "risk_dollars": plan.get("risk_dollars"),
+        "reward_risk": plan.get("reward_risk"),
+        # rich entry context (the part that makes evolution possible)
+        "entry_snapshot": _entry_snapshot(stock),  # indicators at entry
+        "trade_case": tc,  # the advisor's call at entry, for grading
+        "market_regime": market_regime,  # SPY/QQQ trend; filled by the logging flow later
+        # exit detail (filled by close_trade)
         "closed_at": None,
         "exit": None,
+        "exit_reason": None,
+        "hold_days": None,
         "pnl": None,
         "r_multiple": None,
+        "mae": None,  # max adverse excursion (worst point while held)
+        "mfe": None,  # max favorable excursion (best point while held)
         "outcome": None,
         "notes": notes,
     }
@@ -71,16 +115,22 @@ def log_trade(ticker: str, variation_id: str, plan: dict, decision: str | None =
     return entry
 
 
-def log_pass(ticker: str, variation_id: str, decision: str = "Pass", notes: str = "") -> dict:
-    """Record a setup you passed on, so the advisor's calls can be graded later."""
+def log_pass(stock_or_ticker, variation_id: str, decision: str | None = None, notes: str = "") -> dict:
+    """Record a setup you passed on (with its advisor call, if any), so the advisor's
+    Take/Wait/Pass calls can be graded later. Accepts a full result row or a bare ticker."""
+    if isinstance(stock_or_ticker, str):
+        ticker, tc = stock_or_ticker, None
+    else:
+        ticker, tc = stock_or_ticker["ticker"], _trade_case_snapshot(stock_or_ticker)
     trades = _load()
     entry = {
         "id": uuid.uuid4().hex[:8],
         "ticker": ticker,
         "variation_id": variation_id,
-        "decision": decision,
+        "decision": decision or (tc.get("recommendation") if tc else "Pass"),
         "status": "passed",
         "opened_at": _now(),
+        "trade_case": tc,
         "notes": notes,
     }
     trades.append(entry)
@@ -88,8 +138,17 @@ def log_pass(ticker: str, variation_id: str, decision: str = "Pass", notes: str 
     return entry
 
 
-def close_trade(trade_id: str, exit_price: float, notes: str = "") -> dict:
-    """Close an open trade and compute P&L, R-multiple, and win/loss/scratch."""
+def close_trade(
+    trade_id: str,
+    exit_price: float,
+    exit_reason: str | None = None,
+    mae: float | None = None,
+    mfe: float | None = None,
+    notes: str = "",
+) -> dict:
+    """Close an open trade and compute P&L, R-multiple, hold time, and win/loss/scratch.
+    `exit_reason` (target / stop / time / manual / trailed) and MAE/MFE are worth capturing —
+    WHY you exited and how far it ran both feed strategy tuning."""
     trades = _load()
     t = next((x for x in trades if x["id"] == trade_id), None)
     if t is None:
@@ -102,6 +161,14 @@ def close_trade(trade_id: str, exit_price: float, notes: str = "") -> dict:
     t["status"] = "closed"
     t["closed_at"] = _now()
     t["exit"] = exit_price
+    t["exit_reason"] = exit_reason
+    t["mae"] = mae
+    t["mfe"] = mfe
+    try:
+        opened = dt.datetime.fromisoformat(t["opened_at"])
+        t["hold_days"] = round((dt.datetime.fromisoformat(t["closed_at"]) - opened).total_seconds() / 86400, 1)
+    except (ValueError, TypeError):
+        t["hold_days"] = None
     t["pnl"] = round((exit_price - entry) * shares, 2) if entry is not None else None
     t["r_multiple"] = round((exit_price - entry) / risk_per_share, 2) if risk_per_share else None
     if t["pnl"] is None:
