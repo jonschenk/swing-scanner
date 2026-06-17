@@ -42,3 +42,4 @@ backend/strategies.json
 backend/journal.json
 backend/STRATEGY.md
 backend/paper_account.json
+backend/.backtest_cache/

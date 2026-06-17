@@ -25,7 +25,7 @@ def position_plan(
     # raw ATR projection can otherwise land above any level the stock has reached.
     # If the stock is already at/above its highs there's no overhead, so no cap.
     target_price = price + settings.reward_mult * stop_distance
-    if high_52w and high_52w > price:
+    if settings.cap_target_at_high and high_52w and high_52w > price:
         target_price = min(target_price, high_52w)
 
     risk_budget = settings.capital * settings.risk_pct / 100  # $ you're willing to lose

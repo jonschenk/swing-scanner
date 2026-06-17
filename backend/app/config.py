@@ -20,7 +20,8 @@ class ScanSettings(BaseModel):
     risk_pct: float = Field(default=2.0, gt=0, le=100)  # max % of capital to risk per trade
     max_position_pct: float = Field(default=50.0, gt=0, le=100)  # cap on price as % of capital
     atr_stop_mult: float = Field(default=1.5, gt=0)  # stop = entry - mult * ATR
-    reward_mult: float = Field(default=2.0, gt=0)  # target = entry + mult * stop distance, capped at 52w high
+    reward_mult: float = Field(default=2.0, gt=0)  # target = entry + mult * stop distance
+    cap_target_at_high: bool = Field(default=True)  # cap the target at the 52w high (off = pure R:R)
 
     # --- liquidity / price ---
     min_price: float = Field(default=15.0, ge=0)
