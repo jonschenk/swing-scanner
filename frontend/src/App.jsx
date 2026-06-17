@@ -7,6 +7,7 @@ import {
   startScan,
   refreshScan,
   analyzeTicker,
+  deepAnalyze,
   startLive,
   stopLive,
   getLivePrices,
@@ -34,6 +35,22 @@ function tosSymbols(results) {
   return results.map((r) => r.ticker.replace(/-/g, "."));
 }
 
+// Parse the holdings textarea: one position per line, "TICKER SHARES [SECTOR]".
+// Feeds the deep-analysis portfolio-fit reasoning. Replaced by Schwab later.
+function parseHoldings(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (!parts[0]) continue;
+    const pos = { ticker: parts[0].toUpperCase() };
+    const shares = Number(parts[1]);
+    if (Number.isFinite(shares)) pos.shares = shares;
+    if (parts.length > 2) pos.sector = parts.slice(2).join(" ");
+    out.push(pos);
+  }
+  return out;
+}
+
 export default function App() {
   const [backendUp, setBackendUp] = useState(null);
   const [scan, setScan] = useState({ status: "idle", progress: "", results: [] });
@@ -43,6 +60,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now() / 1000); // ticks each second while running
   const [exportNote, setExportNote] = useState(""); // transient "copied"/"saved" confirmation
+  const [holdings, setHoldings] = useState(() => localStorage.getItem("holdings") || "");
+  const [showHoldings, setShowHoldings] = useState(false);
   const [liveOn, setLiveOn] = useState(true); // streaming live prices for displayed cards (on by default)
   const [livePrices, setLivePrices] = useState({}); // ticker -> {price, change_percent}
   const pollRef = useRef(null);
@@ -163,6 +182,29 @@ export default function App() {
       }));
     }
   }, []);
+
+  // Account-aware deep analysis (Claude) for one card, with your holdings as context.
+  const onDeepAnalysis = useCallback(
+    async (ticker) => {
+      setScan((s) => ({
+        ...s,
+        results: s.results.map((r) => (r.ticker === ticker ? { ...r, tc_status: "pending" } : r)),
+      }));
+      try {
+        const state = await deepAnalyze(ticker, parseHoldings(holdings));
+        setScan(state);
+      } catch (e) {
+        setError(e.message);
+        setScan((s) => ({
+          ...s,
+          results: s.results.map((r) =>
+            r.ticker === ticker ? { ...r, tc_status: undefined } : r,
+          ),
+        }));
+      }
+    },
+    [holdings],
+  );
 
   const onRunScan = async (fresh = false) => {
     setError(null);
@@ -378,6 +420,13 @@ export default function App() {
           {exportNote && <span className="export-note muted small">{exportNote} ✓</span>}
           */}
           <button
+            className={`btn export ${showHoldings ? "on" : ""}`}
+            onClick={() => setShowHoldings((v) => !v)}
+            title="Your open positions — fed to Deep analysis so it can weigh portfolio fit"
+          >
+            Holdings{holdings.trim() ? ` (${parseHoldings(holdings).length})` : ""}
+          </button>
+          <button
             className={`btn export live-toggle ${liveOn ? "on" : ""}`}
             onClick={() => setLiveOn((on) => !on)}
             title="Stream live prices for these cards from Yahoo (free, no key). Updates every few seconds."
@@ -385,6 +434,26 @@ export default function App() {
             <span className={`live-dot ${liveOn ? "on" : ""}`} />
             {liveOn ? "Live prices on" : "Live prices off"}
           </button>
+        </div>
+      )}
+
+      {scan.status === "done" && results.length > 0 && showHoldings && (
+        <div className="holdings-panel">
+          <label className="holdings-label muted small">
+            Your open positions — one per line as <code>TICKER SHARES [SECTOR]</code>. Deep
+            analysis uses these to judge sector concentration and overlap. (Schwab will fill
+            this automatically later.)
+          </label>
+          <textarea
+            className="holdings-input"
+            value={holdings}
+            placeholder={"AAPL 25 Technology\nAMD 40 Technology\nXOM 30 Energy"}
+            spellCheck={false}
+            onChange={(e) => {
+              setHoldings(e.target.value);
+              localStorage.setItem("holdings", e.target.value);
+            }}
+          />
         </div>
       )}
 
@@ -414,6 +483,7 @@ export default function App() {
               key={stock.ticker}
               stock={stock}
               onAnalyze={onAnalyze}
+              onDeepAnalysis={onDeepAnalysis}
               live={liveOn ? livePrices[stock.ticker] : null}
             />
           ))}

@@ -31,8 +31,11 @@ function money(v) {
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function StockCard({ stock, onAnalyze, live }) {
+export default function StockCard({ stock, onAnalyze, onDeepAnalysis, live }) {
   const [copied, setCopied] = useState(false);
+  const [showCase, setShowCase] = useState(false); // expanded deep-analysis details
+  const tc = stock.trade_case;
+  const tcPending = stock.tc_status === "pending";
   const livePrice = live && typeof live.price === "number" ? live.price : null;
   const liveDir =
     live && typeof live.change_percent === "number"
@@ -204,6 +207,57 @@ export default function StockCard({ stock, onAnalyze, live }) {
           </div>
         </>
       )}
+
+      {/* ---- account-aware deep analysis (Claude, on demand) ---- */}
+      <div className="deep" onClick={(e) => e.stopPropagation()}>
+        {!tc && (
+          <button
+            className="deep-btn"
+            disabled={tcPending}
+            onClick={() => onDeepAnalysis?.(stock.ticker)}
+          >
+            {tcPending ? (
+              <>
+                <span className="spinner tiny" /> Analyzing trade…
+              </>
+            ) : (
+              <>🔍 Deep analysis</>
+            )}
+          </button>
+        )}
+
+        {tc && tc.error && <p className="deep-error muted small">{tc.bottom_line}</p>}
+
+        {tc && !tc.error && (
+          <div className="trade-case">
+            <div className="tc-head">
+              <span className={`badge rec-${(tc.recommendation || "").toLowerCase()}`}>
+                {tc.recommendation}
+              </span>
+              <span className="muted small">{tc.conviction} conviction</span>
+              <button className="tc-toggle muted small" onClick={() => setShowCase((v) => !v)}>
+                {showCase ? "Hide details" : "Details"}
+              </button>
+            </div>
+            <p className="tc-bottom">{tc.bottom_line}</p>
+
+            {showCase && (
+              <div className="tc-details">
+                <p><span className="tc-label">Thesis</span> {tc.thesis}</p>
+                <p><span className="tc-label">Bull case</span> {tc.bull_case}</p>
+                <p><span className="tc-label">Risks</span> {tc.key_risks}</p>
+                <p><span className="tc-label">Portfolio fit</span> {tc.portfolio_fit}</p>
+                {tc._meta && (
+                  <p className="muted small tc-meta">
+                    {tc._meta.model} · {tc._meta.news_count} news · analyzed for $
+                    {tc._meta.cost_usd}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </article>
   );
 }

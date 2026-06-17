@@ -294,6 +294,146 @@ body {
   color: var(--red);
 }
 
+/* ---------- holdings input ---------- */
+.btn.export.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.holdings-panel {
+  margin: -8px 0 18px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.holdings-label code {
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.holdings-input {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.holdings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---------- deep analysis (trade case) ---------- */
+.deep {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.deep-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.deep-btn:hover:not(:disabled) {
+  background: rgba(91, 140, 255, 0.1);
+}
+
+.deep-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.deep-error {
+  color: var(--red);
+}
+
+.tc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge.rec-take {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--green);
+}
+
+.badge.rec-wait {
+  background: rgba(250, 204, 21, 0.15);
+  color: var(--yellow);
+}
+
+.badge.rec-pass {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--red);
+}
+
+.tc-toggle {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tc-bottom {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.tc-details {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tc-details p {
+  margin: 0;
+}
+
+.tc-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 1px;
+}
+
+.tc-meta {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

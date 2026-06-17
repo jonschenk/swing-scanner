@@ -19,6 +19,7 @@ from .config import ScanSettings, load_settings, save_settings
 from . import price_cache
 from .live import live
 from .scanner import refresh_results, scan_market
+from .trade_case import trade_case
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -163,6 +164,24 @@ async def analyze_one(req: AnalyzeRequest) -> dict:
         return scan_state  # already analyzed
     stock["ai_status"] = "pending"
     await analyze_single(stock)
+    return scan_state
+
+
+class TradeCaseRequest(BaseModel):
+    ticker: str
+    positions: list[dict] = []  # optional holdings: [{ticker, shares, avg_price?, sector?}]
+
+
+@app.post("/api/trade-case")
+async def trade_case_one(req: TradeCaseRequest) -> dict:
+    """On-demand account-aware deep analysis (Claude) for one scanned ticker."""
+    rows = scan_state.get("results") or []
+    stock = next((r for r in rows if r["ticker"] == req.ticker), None)
+    if stock is None:
+        raise HTTPException(status_code=404, detail="Ticker is not in the current results")
+    stock["tc_status"] = "pending"
+    stock["trade_case"] = await trade_case(stock, load_settings(), req.positions or None)
+    stock.pop("tc_status", None)
     return scan_state
 
 

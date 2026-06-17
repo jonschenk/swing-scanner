@@ -25,6 +25,8 @@ export const startScan = (fresh = false) =>
 export const refreshScan = () => request("/api/refresh", { method: "POST" });
 export const analyzeTicker = (ticker) =>
   request("/api/analyze", { method: "POST", body: JSON.stringify({ ticker }) });
+export const deepAnalyze = (ticker, positions = []) =>
+  request("/api/trade-case", { method: "POST", body: JSON.stringify({ ticker, positions }) });
 export const getScanStatus = () => request("/api/scan/status");
 export const getHealth = () => request("/api/health");
 export const startLive = () => request("/api/live/start", { method: "POST" });

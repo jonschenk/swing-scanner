@@ -365,6 +365,8 @@ def refresh_results(settings: ScanSettings, prior_results: list[dict]) -> list[d
                 row["name"] = prior.get("name", "")  # preserve the company name
                 if prior.get("ai_status"):  # preserve on-demand "idle" flag
                     row["ai_status"] = prior["ai_status"]
+                if prior.get("trade_case"):  # preserve an on-demand deep analysis
+                    row["trade_case"] = prior["trade_case"]
                 updated.append(row)
 
     updated.sort(key=lambda r: r["setup_score"], reverse=True)
