@@ -309,6 +309,11 @@ CANDIDATES = [
     ("deeper pullback RSI 35-55", {"rsi_floor": 35.0, "rsi_threshold": 55.0}, 10),
     ("longer hold 20d", {}, 20),
     ("wider stop 2.5xATR", {"atr_stop_mult": 2.5}, 10),
+    # combined winners from the first sweep: uncap the target + be selective on trend
+    ("2.5R uncapped", {"reward_mult": 2.5, "cap_target_at_high": False}, 10),
+    ("2R uncapped + ADX>=30", {"cap_target_at_high": False, "adx_min": 30.0}, 10),
+    ("3R uncapped + ADX>=30", {"reward_mult": 3.0, "cap_target_at_high": False, "adx_min": 30.0}, 10),
+    ("3R uncapped + ADX30 + RS80", {"reward_mult": 3.0, "cap_target_at_high": False, "adx_min": 30.0, "min_rs_rating": 80.0}, 10),
 ]
 
 
