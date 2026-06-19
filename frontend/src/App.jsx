@@ -562,7 +562,6 @@ export default function App() {
         <div className="brand">
           <span className="brand-dot" />
           <h1>Swing Scanner</h1>
-          <span className="brand-sub">2–5 day setups · uptrend pullbacks</span>
           {regime?.available && (
             <span
               className={`regime-badge regime-${regime.regime}`}
@@ -629,9 +628,9 @@ export default function App() {
           <button
             className={`btn ghost ${showStrategy ? "active" : ""}`}
             onClick={() => setShowStrategy((v) => !v)}
-            title="Strategy variations — pick which tuned parameter set the scan runs under"
+            title={`Strategy variations — pick which tuned parameter set the scan runs under${activeVariation ? ` (active: ${activeVariation.name})` : ""}`}
           >
-            🎛 Strategy{activeVariation ? `: ${activeVariation.name.split(" (")[0]}` : ""}
+            🎛 Strategy
           </button>
           <button
             className={`btn ghost ${showJournal ? "active" : ""}`}

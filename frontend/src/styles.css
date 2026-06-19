@@ -40,16 +40,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .brand-dot {
@@ -67,15 +69,27 @@ body {
   letter-spacing: -0.2px;
 }
 
-.brand-sub {
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Uniform, compact, single-line header controls that wrap cleanly in a narrow window. */
+.topbar-actions .btn,
+.topbar-actions .capital-input,
+.topbar-actions .universe-chip {
+  height: 34px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+}
+
+.topbar-actions .btn {
+  padding: 0 13px;
+  font-size: 13px;
 }
 
 .capital-input {
@@ -295,6 +309,7 @@ body {
   padding: 8px 16px;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
