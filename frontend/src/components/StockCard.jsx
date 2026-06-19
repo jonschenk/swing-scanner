@@ -47,6 +47,7 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
       : "";
   const ai = stock.ai ?? {};
   const plan = stock.plan ?? {};
+  const isMeanrev = stock.strategy === "mean_reversion";
   const hasAi = !!stock.ai;
   const idle = !hasAi && stock.ai_status === "idle"; // on-demand: not analyzed yet
   const analyzing = !hasAi && !idle; // queued/in-progress
@@ -92,6 +93,14 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
           </button>
         </div>
         <div className="head-badges">
+          <span
+            className={`strat-chip ${isMeanrev ? "strat-meanrev" : "strat-leader"}`}
+            title={isMeanrev
+              ? "Mean reversion: a quality name on a deep oversold dip, targeting the snap-back to its 5-SMA"
+              : "Leader pullback: a trending market leader taking a healthy breather"}
+          >
+            {isMeanrev ? "🔄 Mean-rev" : "📈 Leader"}
+          </span>
           <span className="score" title="Setup score: relative strength + trend + pullback + volatility">
             {stock.setup_score}
           </span>
@@ -117,19 +126,38 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
             ${money(livePrice != null ? livePrice : stock.price)}
           </span>
         </div>
-        <div className="stat">
-          <span
-            className="stat-label"
-            title="Relative strength rank vs the scanned universe (0–100). Higher = stronger leader."
-          >
-            RS Rank
-          </span>
-          <span className={`stat-value ${rsClass(stock.rs_rating)}`}>{stock.rs_rating}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label" title="How far below the 52-week high">52w High</span>
-          <span className="stat-value">−{stock.pct_from_high}%</span>
-        </div>
+        {isMeanrev ? (
+          <>
+            <div className="stat">
+              <span className="stat-label" title="2-period RSI — the fast oversold trigger. Lower = more washed out.">
+                RSI(2)
+              </span>
+              <span className="stat-value rsi-deep">{stock.rsi2}</span>
+            </div>
+            <div className="stat">
+              <span className="stat-label" title="How far the price has stretched below its 5-day average — the dip depth (the validated entry lever)">
+                Below 5-SMA
+              </span>
+              <span className="stat-value">−{stock.stretch_pct}%</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="stat">
+              <span
+                className="stat-label"
+                title="Relative strength rank vs the scanned universe (0–100). Higher = stronger leader."
+              >
+                RS Rank
+              </span>
+              <span className={`stat-value ${rsClass(stock.rs_rating)}`}>{stock.rs_rating}</span>
+            </div>
+            <div className="stat">
+              <span className="stat-label" title="How far below the 52-week high">52w High</span>
+              <span className="stat-value">−{stock.pct_from_high}%</span>
+            </div>
+          </>
+        )}
         <div className="stat">
           <span className="stat-label">RSI(14)</span>
           <span className={`stat-value ${rsiClass(stock.rsi)}`}>{stock.rsi}</span>
@@ -171,7 +199,9 @@ export default function StockCard({ stock, onAnalyze, onDeepAnalysis, onPaperBuy
             <span className="lvl-label">Stop</span>${money(plan.stop)}
           </span>
           <span className="lvl lvl-target">
-            <span className="lvl-label">Target</span>${money(plan.target)}
+            <span className="lvl-label" title={isMeanrev ? "The 5-SMA reversion level — where mean-reversion exits the bounce" : "Profit target"}>
+              {isMeanrev ? "Target (5-SMA)" : "Target"}
+            </span>${money(plan.target)}
           </span>
         </div>
         <div className="plan-risk muted small">

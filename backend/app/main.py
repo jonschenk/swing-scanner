@@ -60,19 +60,21 @@ def _set_progress(message: str) -> None:
     log.info(message)
 
 
-async def _run_scan(force_fresh: bool = False) -> None:
+async def _run_scan(force_fresh: bool = False, scan_strategy: str = "leader_pullback") -> None:
     # The scan runs under the ACTIVE strategy variation (its knobs overlaid on the account
     # settings), so the picker actually drives the scan. Account fields (capital/universe/AI)
-    # stay from settings.json.
+    # stay from settings.json. `scan_strategy` picks the signal family (leader-pullback vs
+    # mean-reversion); the variation's knobs (e.g. atr_stop_mult) still apply.
     settings = strategy.apply_active(load_settings())
     active = strategy.get_active()
     scan_state["variation"] = {"id": active["id"], "name": active["name"]} if active else None
+    scan_state["strategy"] = scan_strategy
     scan_state["from_cache"] = (
         not force_fresh and price_cache.is_fresh(settings.universe, settings.cache_minutes)
     )
     try:
         _set_progress("Starting scan…")
-        candidates = await asyncio.to_thread(scan_market, settings, _set_progress, force_fresh)
+        candidates = await asyncio.to_thread(scan_market, settings, _set_progress, force_fresh, scan_strategy)
         # Publish the technical results immediately — the cards show right away
         # with "awaiting AI" placeholders, and analyze_all fills in each card's
         # analysis in place (the dicts are the same objects polled via /status).
@@ -151,9 +153,11 @@ async def update_settings(settings: ScanSettings) -> dict:
 
 
 @app.post("/api/scan", status_code=202)
-async def start_scan(fresh: bool = False) -> dict:
+async def start_scan(fresh: bool = False, strategy: str = "leader_pullback") -> dict:
     if scan_state["status"] == "running":
         raise HTTPException(status_code=409, detail="A scan is already running")
+    if strategy not in ("leader_pullback", "mean_reversion"):
+        raise HTTPException(status_code=422, detail=f"Unknown strategy: {strategy}")
     scan_state.update(
         status="running",
         progress="Queued…",
@@ -164,7 +168,7 @@ async def start_scan(fresh: bool = False) -> dict:
         finished_at=None,
         refreshed_at=None,
     )
-    asyncio.create_task(_run_scan(force_fresh=fresh))
+    asyncio.create_task(_run_scan(force_fresh=fresh, scan_strategy=strategy))
     return {"status": "running"}
 
 
@@ -179,7 +183,8 @@ async def refresh_scan() -> dict:
     scan_state["refreshing"] = True
     try:
         settings = strategy.apply_active(load_settings())  # same strategy the scan used
-        scan_state["results"] = await asyncio.to_thread(refresh_results, settings, rows)
+        scan_strategy = scan_state.get("strategy", "leader_pullback")
+        scan_state["results"] = await asyncio.to_thread(refresh_results, settings, rows, scan_strategy)
         scan_state["refreshed_at"] = time.time()
     except Exception:
         log.exception("Refresh failed")

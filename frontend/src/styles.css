@@ -217,6 +217,51 @@ body {
   color: var(--accent);
 }
 
+/* ---------- scan-strategy toggle bar ---------- */
+.strategy-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  flex-wrap: wrap;
+}
+
+.seg.strategy-seg {
+  width: auto;
+  display: inline-flex;
+}
+
+.strategy-seg .seg-btn {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+}
+
+.strategy-bar-note {
+  white-space: nowrap;
+}
+
+/* ---------- per-card strategy chip ---------- */
+.strat-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+}
+
+.strat-leader {
+  color: var(--accent-hover);
+  background: rgba(91, 140, 255, 0.1);
+  border-color: rgba(91, 140, 255, 0.3);
+}
+
+.strat-meanrev {
+  color: var(--yellow);
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.35);
+}
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;

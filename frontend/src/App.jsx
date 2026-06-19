@@ -110,6 +110,8 @@ export default function App() {
   const [regime, setRegime] = useState(null); // {regime, label, strategy, ...} the router's current call
   const [strategies, setStrategies] = useState(null); // {active, variations} for the picker
   const [showStrategy, setShowStrategy] = useState(false);
+  const [scanStrategy, setScanStrategy] = useState("leader_pullback"); // which signal family the scan runs
+  const userPickedStrategy = useRef(false); // true once the user manually toggles (stops regime auto-default)
   const pollRef = useRef(null);
   const liveRef = useRef(null);
   const refreshingRef = useRef(false);
@@ -315,7 +317,13 @@ export default function App() {
     const pull = async () => {
       try {
         const r = await getRegime();
-        if (alive) setRegime(r);
+        if (!alive) return;
+        setRegime(r);
+        // Auto-align the scan to the regime's strategy until the user picks manually:
+        // chop -> mean-reversion (buy dips), bull/bear -> leader-pullback.
+        if (r?.available && !userPickedStrategy.current) {
+          setScanStrategy(r.regime === "chop" ? "mean_reversion" : "leader_pullback");
+        }
       } catch {
         /* leave the last value; the badge just won't update */
       }
@@ -370,10 +378,18 @@ export default function App() {
     }
   };
 
+  const pickStrategy = (s) => {
+    userPickedStrategy.current = true; // stop the regime from auto-switching it back
+    setScanStrategy(s);
+  };
+  // What the validated router would run in today's regime (for the advisory copy).
+  const routerPick =
+    regime?.regime === "chop" ? "mean_reversion" : regime?.regime === "bear" ? "cash" : "leader_pullback";
+
   const onRunScan = async (fresh = false) => {
     setError(null);
     try {
-      await startScan(fresh);
+      await startScan(fresh, scanStrategy);
       setScan((s) => ({ ...s, status: "running", progress: "Starting scan…", started_at: Date.now() / 1000 }));
       beginPolling();
     } catch (e) {
@@ -577,6 +593,35 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <div className="strategy-bar">
+        <span className="muted small">Scan for</span>
+        <div className="seg strategy-seg">
+          <button
+            className={`seg-btn ${scanStrategy === "leader_pullback" ? "active" : ""}`}
+            onClick={() => pickStrategy("leader_pullback")}
+            title="Buy pullbacks in trending market leaders (the momentum strategy)"
+          >
+            📈 Leader pullback
+          </button>
+          <button
+            className={`seg-btn ${scanStrategy === "mean_reversion" ? "active" : ""}`}
+            onClick={() => pickStrategy("mean_reversion")}
+            title="Buy quality names on a deep oversold dip and ride the snap-back (the chop strategy)"
+          >
+            🔄 Mean reversion
+          </button>
+        </div>
+        {regime?.available && (
+          <span className="muted small strategy-bar-note">
+            {routerPick === "cash"
+              ? `· the router would hold cash in today's ${regime.label} market`
+              : routerPick === scanStrategy
+              ? `· matches today's ${regime.label} regime`
+              : `· the router would scan ${routerPick === "mean_reversion" ? "mean-reversion" : "leader-pullback"} in today's ${regime.label} market`}
+          </span>
+        )}
+      </div>
 
       {backendUp === false && (
         <div className="banner error">
@@ -869,29 +914,34 @@ export default function App() {
       )}
 
       <main>
-        {regime?.available && (scan.status === "done" || scan.status === "analyzing") && results.length > 0 && (
-          <div className={`regime-note regime-note-${regime.regime}`}>
-            {regime.regime === "bull" && (
-              <>
-                <strong>Bull market.</strong> Leader-pullback is the validated router's active
-                strategy right now — these momentum setups are on-regime.
-              </>
-            )}
-            {regime.regime === "chop" && (
-              <>
-                <strong>Choppy market.</strong> The validated router would favor mean-reversion
-                (buying deep dips) today. These leader-pullback setups are off-regime — consider
-                sizing down or waiting for a cleaner trend.
-              </>
-            )}
-            {regime.regime === "bear" && (
-              <>
-                <strong>Downtrend.</strong> The validated router would be in <strong>cash</strong> today —
-                leader-pullback bleeds in bear markets. These are shown for awareness, not as a call to act.
-              </>
-            )}
-          </div>
-        )}
+        {regime?.available && (scan.status === "done" || scan.status === "analyzing") && results.length > 0 && (() => {
+          const scanned = scan.strategy || "leader_pullback";
+          const onRegime = routerPick === scanned;
+          const noteClass = regime.regime === "bear" ? "bear" : onRegime ? regime.regime : "chop";
+          const scannedLabel = scanned === "mean_reversion" ? "mean-reversion dips" : "leader-pullback momentum setups";
+          return (
+            <div className={`regime-note regime-note-${noteClass}`}>
+              {regime.regime === "bear" ? (
+                <>
+                  <strong>Downtrend.</strong> The validated router would be in <strong>cash</strong> today —
+                  both strategies bleed in bear markets. These {scannedLabel} are shown for awareness,
+                  not as a call to act.
+                </>
+              ) : onRegime ? (
+                <>
+                  <strong>{regime.label} market.</strong> You're scanning {scannedLabel} — the router's
+                  active strategy for this regime. On-regime.
+                </>
+              ) : (
+                <>
+                  <strong>{regime.label} market.</strong> The router would scan{" "}
+                  {routerPick === "mean_reversion" ? "mean-reversion dips" : "leader-pullback momentum"} here.
+                  These {scannedLabel} are off-regime — switch above, or size down.
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {!running && scan.status === "done" && results.length === 0 && (
           <div className="empty">

@@ -510,18 +510,20 @@ CANDIDATES = [
 # trade FEWER, BETTER dips so each trade's edge can clear the slippage drag. Levers: mr_rsi2_max
 # (oversold depth), mr_min_stretch_pct (how far below the 5-SMA), mr_require_uptrend (quality gate).
 # Stop=2.5xATR / hold=10 was the prior best, so it's held fixed while we vary selectivity.
+# NOTE: mr_min_stretch_pct now defaults to 4.0 (the validated selective entry is the app default),
+# so candidates that want the LOOSE/no-stretch entry must set it back to 0.0 explicitly.
 _MR_BASE = {"atr_stop_mult": 2.5}
 MEANREV_CANDIDATES = [
-    ("loose RSI2<10 (baseline)", {**_MR_BASE}, 10),
-    ("RSI2<5", {**_MR_BASE, "mr_rsi2_max": 5.0}, 10),
-    ("RSI2<3", {**_MR_BASE, "mr_rsi2_max": 3.0}, 10),
+    ("loose RSI2<10 (baseline)", {**_MR_BASE, "mr_min_stretch_pct": 0.0}, 10),
+    ("RSI2<5", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_min_stretch_pct": 0.0}, 10),
+    ("RSI2<3", {**_MR_BASE, "mr_rsi2_max": 3.0, "mr_min_stretch_pct": 0.0}, 10),
     ("RSI2<10 + stretch>=2%", {**_MR_BASE, "mr_min_stretch_pct": 2.0}, 10),
     ("RSI2<10 + stretch>=4%", {**_MR_BASE, "mr_min_stretch_pct": 4.0}, 10),
     ("RSI2<5 + stretch>=3%", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_min_stretch_pct": 3.0}, 10),
-    ("RSI2<5 + uptrend", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_require_uptrend": True}, 10),
+    ("RSI2<5 + uptrend", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_min_stretch_pct": 0.0, "mr_require_uptrend": True}, 10),
     ("RSI2<5 + stretch>=3% + uptrend", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_min_stretch_pct": 3.0, "mr_require_uptrend": True}, 10),
     ("RSI2<3 + stretch>=4% + uptrend", {**_MR_BASE, "mr_rsi2_max": 3.0, "mr_min_stretch_pct": 4.0, "mr_require_uptrend": True}, 10),
-    ("RSI2<5 + uptrend, hold5", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_require_uptrend": True}, 5),
+    ("RSI2<5 + uptrend, hold5", {**_MR_BASE, "mr_rsi2_max": 5.0, "mr_min_stretch_pct": 0.0, "mr_require_uptrend": True}, 5),
 ]
 
 

@@ -32,6 +32,12 @@ BATCH_SIZE = 100
 HISTORY_PERIOD = "1y"  # ~252 bars: enough for 200-SMA, its slope, and 6-month momentum
 MIN_BARS = 220  # enough for 200-SMA + a month of slope
 
+# The validated selective mean-reversion entry (the backtester's cost-robust lever): require the
+# close to sit at least this far below the 5-SMA. We enforce it as the live FLOOR so a stale/loose
+# persisted setting (mr_min_stretch_pct = 0) can't silently revert the live scan to the
+# cost-fragile high-frequency version. A user who sets a real value keeps control.
+MEANREV_MIN_STRETCH_FLOOR = 4.0
+
 # Pre-screen net (price + volume) applied before downloading history, so we only
 # pull a year of bars for plausibly-tradeable names. Set just under the real
 # min-price/volume defaults ($15 / 500k) with a small safety margin. NOTE: this
@@ -79,6 +85,7 @@ def _core_metrics(df: pd.DataFrame) -> Optional[dict]:
     sma200_series = sma(close, 200)
     m = {
         "price": float(close.iloc[-1]),
+        "sma5": float(sma(close, 5).iloc[-1]),  # mean-reversion: the reversion (exit) reference
         "sma20": float(sma(close, 20).iloc[-1]),
         "sma50": float(sma(close, 50).iloc[-1]),
         "sma200": float(sma200_series.iloc[-1]),
@@ -86,6 +93,7 @@ def _core_metrics(df: pd.DataFrame) -> Optional[dict]:
         "avg_volume": float(volume.rolling(21).mean().iloc[-1]),
         "last_volume": float(volume.iloc[-1]),
         "rsi": float(rsi(close, 14).iloc[-1]),
+        "rsi2": float(rsi(close, 2).iloc[-1]),  # mean-reversion: fast oversold trigger (Connors-style)
         "atr": float(atr(high, low, close, 14).iloc[-1]),
         "adx": float(adx(high, low, close, 14).iloc[-1]),
         "high_52w": float(high.tail(252).max()),
@@ -117,6 +125,7 @@ def _build_row(ticker: str, m: dict, settings: ScanSettings, rs_rating: float) -
 
     return {
         "ticker": ticker,
+        "strategy": "leader_pullback",
         "price": round(price, 2),
         "rsi": round(m["rsi"], 1),
         "avg_volume": int(m["avg_volume"]),
@@ -191,16 +200,96 @@ def recompute_row(
     return _build_row(ticker, m, settings, rs_rating)
 
 
+# ---- mean-reversion strategy (the regime router's chop leg) -------------------------------
+# Genuinely different from leader-pullback: buy a QUALITY name (above its 200-SMA) when it's
+# deeply oversold short-term AND stretched well below its 5-SMA, then ride the snap-back. The
+# selective entry (stretch >= mr_min_stretch_pct, default 4%) is the cost-robust lever the
+# backtester found — fewer, deeper dips so each trade's edge clears slippage.
+
+def _build_row_meanrev(ticker: str, m: dict, settings: ScanSettings) -> Optional[dict]:
+    """Assemble a sized mean-reversion row. The profit target is the 5-SMA (the reversion the
+    backtester exits on), not a reward multiple. Used by the scan and the live refresh."""
+    price, atr14, sma5 = m["price"], m["atr"], m["sma5"]
+    plan = position_plan(price, atr14, settings, target_override=sma5)
+    if plan is None:
+        return None
+
+    atr_pct = atr14 / price * 100
+    rel_volume = m["last_volume"] / m["avg_volume"] if m["avg_volume"] else 0.0
+    stretch = (sma5 - price) / sma5 * 100 if sma5 > 0 else 0.0
+    pct_from_high = (m["high_52w"] - price) / m["high_52w"] * 100
+
+    # Rank dips by the validated lever (depth below the 5-SMA) first, then oversold-ness.
+    setup_score = round(stretch * 5 + max(0.0, settings.mr_rsi2_max - m["rsi2"]) * 2 + min(atr_pct, 8), 1)
+
+    return {
+        "ticker": ticker,
+        "strategy": "mean_reversion",
+        "price": round(price, 2),
+        "rsi": round(m["rsi"], 1),
+        "rsi2": round(m["rsi2"], 1),
+        "stretch_pct": round(stretch, 1),  # how far below the 5-SMA (the dip depth)
+        "avg_volume": int(m["avg_volume"]),
+        "rel_volume": round(rel_volume, 2),
+        "adx": round(m["adx"], 1),
+        "atr": round(atr14, 2),
+        "atr_pct": round(atr_pct, 1),
+        "rs_rating": None,  # not a leadership strategy; the card hides this tile for mean-reversion
+        "pct_from_high": round(pct_from_high, 1),
+        "sma5": round(sma5, 2),
+        "sma20": round(m["sma20"], 2),
+        "sma50": round(m["sma50"], 2),
+        "sma200": round(m["sma200"], 2),
+        "pct_above_sma50": round((price / m["sma50"] - 1) * 100, 1),
+        "setup_score": setup_score,
+        "plan": plan,
+    }
+
+
+def evaluate_ticker_meanrev(ticker: str, df: pd.DataFrame, settings: ScanSettings) -> Optional[dict]:
+    """Return a sized mean-reversion row if the ticker is a quality name on a deep oversold dip."""
+    m = _core_metrics(df)
+    if m is None:
+        return None
+    price, sma5 = m["price"], m["sma5"]
+    stretch = (sma5 - price) / sma5 * 100 if sma5 > 0 else 0.0
+
+    passes = (
+        price > settings.min_price
+        and price <= settings.max_price
+        and m["avg_volume"] > settings.min_avg_volume
+        and price > m["sma200"]              # quality: long-term uptrend (no broken stocks)
+        and m["rsi2"] < settings.mr_rsi2_max  # deeply oversold short-term
+        and price < sma5                      # stretched below the short MA
+        and stretch >= settings.mr_min_stretch_pct  # ...by a real amount (the selective lever)
+    )
+    if settings.mr_require_uptrend:           # optional: dip must sit in a real uptrend
+        passes = passes and m["sma50"] > m["sma200"] and m["sma200"] > m["sma200_prior"]
+    if not passes:
+        return None
+    return _build_row_meanrev(ticker, m, settings)
+
+
+def recompute_row_meanrev(ticker: str, df: pd.DataFrame, settings: ScanSettings) -> Optional[dict]:
+    """Refresh a displayed mean-reversion setup's live numbers without re-filtering."""
+    m = _core_metrics(df)
+    if m is None:
+        return None
+    return _build_row_meanrev(ticker, m, settings)
+
+
 def scan_market(
     settings: ScanSettings,
     progress: Callable[[str], None] = lambda msg: None,
     force_fresh: bool = False,
+    strategy: str = "leader_pullback",
 ) -> list[dict]:
     """Blocking scan over the whole universe. Run in a worker thread.
 
     Bars come from the on-disk cache when it's fresh enough (instant), else from
     a full download. Either way EVERY cached ticker is re-evaluated from scratch,
-    so the cache only saves the download — it never decides what passes."""
+    so the cache only saves the download — it never decides what passes. The same
+    cached bars serve both strategies; switching strategy just re-evaluates."""
     universe = settings.universe
     if not force_fresh and price_cache.is_fresh(universe, settings.cache_minutes):
         age = price_cache.age_minutes() or 0
@@ -212,7 +301,9 @@ def scan_market(
 
     if not frames_all:
         return []
-    results = _evaluate(frames_all, settings, progress)
+    if strategy == "mean_reversion" and settings.mr_min_stretch_pct < MEANREV_MIN_STRETCH_FLOOR:
+        settings = settings.model_copy(update={"mr_min_stretch_pct": MEANREV_MIN_STRETCH_FLOOR})
+    results = _evaluate(frames_all, settings, progress, strategy)
     if results:
         names = company_names()
         for r in results:
@@ -279,39 +370,54 @@ def _download_universe(universe: str, progress) -> dict[str, pd.DataFrame]:
     return frames
 
 
-def _evaluate(frames_all: dict[str, pd.DataFrame], settings: ScanSettings, progress) -> list[dict]:
-    """Rank relative strength across the whole universe and apply the full filter
-    set. Runs on every cached/downloaded ticker — nothing is skipped."""
+def _evaluate(
+    frames_all: dict[str, pd.DataFrame], settings: ScanSettings, progress,
+    strategy: str = "leader_pullback",
+) -> list[dict]:
+    """Apply the chosen strategy's filter to every cached/downloaded ticker (nothing skipped).
+    Leader-pullback needs a cross-sectional relative-strength rank; mean-reversion is per-ticker
+    (no ranking), so it skips that pass."""
     momentum: dict[str, float] = {}
     liquid: dict[str, pd.DataFrame] = {}  # passes the cheap price/volume pre-gate
+    need_rs = strategy == "leader_pullback"
 
     for ticker, df in frames_all.items():
         try:
-            mom = _blended_momentum(df["Close"])
-            if mom is None:
-                continue
-            momentum[ticker] = mom  # ranked across the whole universe
             price = float(df["Close"].iloc[-1])
             avg_vol = float(df["Volume"].tail(21).mean())
-            if price > settings.min_price and price <= settings.max_price and avg_vol > settings.min_avg_volume:
+            liquid_ok = price > settings.min_price and price <= settings.max_price and avg_vol > settings.min_avg_volume
+            if need_rs:
+                mom = _blended_momentum(df["Close"])
+                if mom is None:
+                    continue
+                momentum[ticker] = mom  # ranked across the whole universe
+            if liquid_ok:
                 liquid[ticker] = df
         except Exception:
             log.exception("Failed preparing %s", ticker)
 
-    if not momentum:
-        return []
-
-    rs_ratings = (pd.Series(momentum).rank(pct=True) * 100).round(1).to_dict()
-    progress(f"Ranking {len(momentum)} stocks, evaluating {len(liquid)} liquid candidates…")
-
     results: list[dict] = []
-    for ticker, df in liquid.items():
-        try:
-            hit = evaluate_ticker(ticker, df, settings, rs_ratings[ticker])
-            if hit:
-                results.append(hit)
-        except Exception:
-            log.exception("Failed evaluating %s", ticker)
+    if strategy == "mean_reversion":
+        progress(f"Scanning {len(liquid)} liquid names for oversold dips (mean-reversion)…")
+        for ticker, df in liquid.items():
+            try:
+                hit = evaluate_ticker_meanrev(ticker, df, settings)
+                if hit:
+                    results.append(hit)
+            except Exception:
+                log.exception("Failed evaluating %s", ticker)
+    else:
+        if not momentum:
+            return []
+        rs_ratings = (pd.Series(momentum).rank(pct=True) * 100).round(1).to_dict()
+        progress(f"Ranking {len(momentum)} stocks, evaluating {len(liquid)} liquid candidates…")
+        for ticker, df in liquid.items():
+            try:
+                hit = evaluate_ticker(ticker, df, settings, rs_ratings[ticker])
+                if hit:
+                    results.append(hit)
+            except Exception:
+                log.exception("Failed evaluating %s", ticker)
 
     results.sort(key=lambda r: r["setup_score"], reverse=True)
     if len(results) > settings.max_results:
@@ -320,13 +426,16 @@ def _evaluate(frames_all: dict[str, pd.DataFrame], settings: ScanSettings, progr
     return results
 
 
-def refresh_results(settings: ScanSettings, prior_results: list[dict]) -> list[dict]:
+def refresh_results(
+    settings: ScanSettings, prior_results: list[dict], strategy: str = "leader_pullback",
+) -> list[dict]:
     """Cheaply re-pull live data for the currently-displayed setups only and
     recompute their numbers + position plans. Keeps the existing AI analysis and
     relative-strength rating (a few minutes stale is fine); no universe scan, no
     AI calls — so it's a fast (~seconds) update, not a re-scan."""
     if not prior_results:
         return prior_results
+    meanrev = strategy == "mean_reversion"
 
     prior_by_ticker = {r["ticker"]: r for r in prior_results}
     tickers = list(prior_by_ticker.keys())
@@ -355,7 +464,10 @@ def refresh_results(settings: ScanSettings, prior_results: list[dict]) -> list[d
                 try:
                     df = _extract(data, ticker)
                     if df is not None:
-                        row = recompute_row(ticker, df, settings, prior.get("rs_rating", 0))
+                        row = (
+                            recompute_row_meanrev(ticker, df, settings) if meanrev
+                            else recompute_row(ticker, df, settings, prior.get("rs_rating", 0))
+                        )
                 except Exception:
                     log.exception("Refresh recompute failed for %s", ticker)
             if row is None:

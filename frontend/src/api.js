@@ -20,8 +20,8 @@ async function request(path, options = {}) {
 export const getSettings = () => request("/api/settings");
 export const saveSettings = (settings) =>
   request("/api/settings", { method: "PUT", body: JSON.stringify(settings) });
-export const startScan = (fresh = false) =>
-  request(`/api/scan?fresh=${fresh ? "true" : "false"}`, { method: "POST" });
+export const startScan = (fresh = false, strategy = "leader_pullback") =>
+  request(`/api/scan?fresh=${fresh ? "true" : "false"}&strategy=${strategy}`, { method: "POST" });
 export const refreshScan = () => request("/api/refresh", { method: "POST" });
 export const analyzeTicker = (ticker) =>
   request("/api/analyze", { method: "POST", body: JSON.stringify({ ticker }) });
