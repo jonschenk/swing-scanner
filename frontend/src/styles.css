@@ -297,6 +297,59 @@ body {
   margin-right: 6px;
 }
 
+/* ---------- alert engine row ---------- */
+.alert-engine-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 2px 0 12px;
+  padding: 9px 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.engine-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.engine-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.engine-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.engine-interval select {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.engine-interval select:disabled {
+  opacity: 0.5;
+}
+
+.engine-status {
+  margin-left: auto;
+  text-align: right;
+}
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;

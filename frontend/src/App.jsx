@@ -25,6 +25,8 @@ import {
   approveProposal,
   denyProposal,
   clearQueue,
+  getAlertEngine,
+  setAlertEngine,
 } from "./api.js";
 import StockCard from "./components/StockCard.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
@@ -78,6 +80,25 @@ function usd(n) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Plain-English status line for the alert engine.
+function engineStatusText(e) {
+  if (!e?.enabled) return "Off — turn on to auto-scan during market hours and queue setups for review.";
+  const strat = { leader_pullback: "leader-pullback", mean_reversion: "mean-reversion", cash: "cash" }[e.last_strategy] || e.last_strategy;
+  const ran = e.last_run ? ` · last ran ${new Date(e.last_run).toLocaleTimeString()}` : "";
+  switch (e.last_status) {
+    case "watching":
+      return `Watching · ${e.market_open ? "market open" : "market closed"}${e.last_regime ? ` · ${e.last_regime} → ${strat}` : ""}${ran}`;
+    case "market-closed":
+      return "On · waiting for the market to open (9:30–16:00 ET, Mon–Fri)";
+    case "bear-cash":
+      return `On · Bear regime — holding cash, queuing nothing${ran}`;
+    case "error":
+      return "On · couldn’t read the market just now — retrying";
+    default:
+      return "On · first scan pending";
+  }
+}
+
 // Parse the holdings textarea: one position per line, "TICKER SHARES [SECTOR]".
 // Feeds the deep-analysis portfolio-fit reasoning. Replaced by Schwab later.
 function parseHoldings(text) {
@@ -120,6 +141,7 @@ export default function App() {
   const [queue, setQueue] = useState(null); // {pending, decided} approve/deny review queue
   const [showQueue, setShowQueue] = useState(false);
   const [queueBusy, setQueueBusy] = useState(false);
+  const [alertEngine, setAlertEngineState] = useState(null); // auto-scan scheduler state
   const pollRef = useRef(null);
   const liveRef = useRef(null);
   const refreshingRef = useRef(false);
@@ -361,15 +383,40 @@ export default function App() {
   };
   const activeVariation = strategies?.variations?.[strategies.active] || null;
 
-  // Review queue: load once on mount; refresh while the panel is open.
+  // Review queue + alert-engine state: load once on mount.
   useEffect(() => {
     getQueue().then(setQueue).catch(() => {});
+    getAlertEngine().then(setAlertEngineState).catch(() => {});
   }, []);
+
+  // Keep the queue + engine fresh: poll fast while the panel is open, slowly while the engine
+  // is enabled (so the badge picks up auto-queued setups even with the panel closed).
+  const engineOn = alertEngine?.enabled;
   useEffect(() => {
-    if (!showQueue) return;
-    const id = setInterval(() => getQueue().then(setQueue).catch(() => {}), 5000);
+    if (!showQueue && !engineOn) return;
+    const pull = () => {
+      getQueue().then(setQueue).catch(() => {});
+      getAlertEngine().then(setAlertEngineState).catch(() => {});
+    };
+    const id = setInterval(pull, showQueue ? 5000 : 30000);
     return () => clearInterval(id);
-  }, [showQueue]);
+  }, [showQueue, engineOn]);
+
+  const onToggleEngine = async (enabled) => {
+    try {
+      setAlertEngineState(await setAlertEngine({ enabled }));
+      if (enabled) setShowQueue(true);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+  const onSetInterval = async (interval_minutes) => {
+    try {
+      setAlertEngineState(await setAlertEngine({ interval_minutes }));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   const onBuildQueue = async () => {
     setQueueBusy(true);
@@ -937,6 +984,32 @@ export default function App() {
               {queueBusy ? "Working…" : "Build from current scan"}
             </button>
           </div>
+
+          {alertEngine && (
+            <div className="alert-engine-row">
+              <label className="engine-toggle" title="Auto-scan during market hours and queue new setups for review. Honours the regime: bull→leader, chop→mean-reversion, bear→cash. Opt-in; nothing trades without your Approve.">
+                <input
+                  type="checkbox"
+                  checked={!!alertEngine.enabled}
+                  onChange={(e) => onToggleEngine(e.target.checked)}
+                />
+                🔔 Auto-scan &amp; alert
+              </label>
+              <label className="engine-interval muted small">
+                every
+                <select
+                  value={alertEngine.interval_minutes}
+                  onChange={(e) => onSetInterval(Number(e.target.value))}
+                  disabled={!alertEngine.enabled}
+                >
+                  {[15, 30, 60, 120].map((m) => (
+                    <option key={m} value={m}>{m} min</option>
+                  ))}
+                </select>
+              </label>
+              <span className="muted small engine-status">{engineStatusText(alertEngine)}</span>
+            </div>
+          )}
 
           {pendingCount === 0 ? (
             <p className="muted small" style={{ marginTop: "10px" }}>

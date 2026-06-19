@@ -65,12 +65,15 @@ def view() -> dict:
     return {"pending": pending, "decided": decided[:20]}
 
 
-def build(results: list[dict], regime: str | None, scan_strategy: str, top_n: int = DEFAULT_TOP_N) -> dict:
+def build(results: list[dict], regime: str | None, scan_strategy: str,
+          top_n: int = DEFAULT_TOP_N, exclude: set[str] | None = None) -> dict:
     """Populate the queue from the current scan's best setups. Recommended picks (if a
     'Recommend top picks' pass was run) lead, by rank; otherwise the top setup scores. Tickers
-    already pending in the queue or already held as a paper position are skipped (no dupes)."""
+    already pending in the queue or already held as a paper position are skipped (no dupes);
+    `exclude` skips more (the alert engine passes today's already-alerted names). Returns the
+    view plus `added` and the tickers added (so the alert engine can record them)."""
     proposals = _load()
-    already = {p["ticker"] for p in proposals if p["status"] == "pending"}
+    already = {p["ticker"] for p in proposals if p["status"] == "pending"} | (exclude or set())
     held = {pos["ticker"] for pos in paper.account().get("positions", [])}
 
     # Rank: recommended rows first (by their rank), then by setup score.
@@ -79,9 +82,9 @@ def build(results: list[dict], regime: str | None, scan_strategy: str, top_n: in
         key=lambda r: (r.get("recommendation") is None, r.get("recommendation", {}).get("rank", 1e9), -r.get("setup_score", 0)),
     )
 
-    added = 0
+    added_tickers: list[str] = []
     for r in ranked:
-        if added >= top_n:
+        if len(added_tickers) >= top_n:
             break
         ticker = r["ticker"]
         if ticker in already or ticker in held:
@@ -106,10 +109,10 @@ def build(results: list[dict], regime: str | None, scan_strategy: str, top_n: in
             "decided_at": None,
         })
         already.add(ticker)
-        added += 1
+        added_tickers.append(ticker)
 
     _save(proposals)
-    return {**view(), "added": added}
+    return {**view(), "added": len(added_tickers), "added_tickers": added_tickers}
 
 
 def approve(proposal_id: str) -> dict:

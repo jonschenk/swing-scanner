@@ -43,6 +43,9 @@ export const approveProposal = (id) =>
 export const denyProposal = (id, reason = "") =>
   request("/api/queue/deny", { method: "POST", body: JSON.stringify({ id, reason }) });
 export const clearQueue = () => request("/api/queue/clear", { method: "POST" });
+export const getAlertEngine = () => request("/api/alerts/engine");
+export const setAlertEngine = (cfg) =>
+  request("/api/alerts/engine", { method: "POST", body: JSON.stringify(cfg) });
 export const getPaperAccount = () => request("/api/paper/account");
 export const getJournal = () => request("/api/journal");
 export const paperBuy = (ticker) =>

@@ -22,6 +22,7 @@ from . import journal
 from . import regime as regime_mod
 from . import strategy
 from . import queue as review_queue
+from . import alert_engine
 from .live import live
 from .scanner import refresh_results, scan_market
 from .trade_case import trade_case
@@ -374,18 +375,74 @@ async def queue_clear() -> dict:
     return review_queue.clear()
 
 
+# ---- alert engine (phase 1): auto-scan on a schedule + auto-fill the review queue ----
+class AlertEngineRequest(BaseModel):
+    enabled: bool | None = None
+    interval_minutes: int | None = None
+
+
+@app.get("/api/alerts/engine")
+async def alert_engine_state() -> dict:
+    return alert_engine.state()
+
+
+@app.post("/api/alerts/engine")
+async def alert_engine_configure(req: AlertEngineRequest) -> dict:
+    return alert_engine.configure(req.enabled, req.interval_minutes)
+
+
+ALERT_TICK_SECONDS = 60  # how often to check whether a cycle is due
+
+
+async def _alert_cycle() -> None:
+    """One scheduled cycle: pick the regime's strategy, scan, and auto-fill the review queue.
+    Honours the router — bear regime sits in cash and queues nothing (the kill-switch)."""
+    if scan_state["status"] in ("running", "analyzing"):
+        return  # don't collide with a user-initiated scan; retry next tick
+    if not alert_engine.market_open():
+        alert_engine.mark("market-closed")
+        return
+    reg = await asyncio.to_thread(regime_mod.current_regime)
+    if not reg.get("available"):
+        alert_engine.mark("error")  # can't classify right now; retry next tick
+        return
+    regime = reg["regime"]
+    if regime == "bear":
+        alert_engine.record("bear-cash", regime=regime, strategy="cash")  # sit out, queue nothing
+        return
+    strat = "mean_reversion" if regime == "chop" else "leader_pullback"
+    await _run_scan(force_fresh=False, scan_strategy=strat)
+    rows = scan_state.get("results") or []
+    res = review_queue.build(rows, regime, strat, exclude=alert_engine.exclude_today())
+    alert_engine.record("watching", regime=regime, strategy=strat, new_tickers=res.get("added_tickers", []))
+
+
+async def _alert_loop() -> None:
+    """Background scheduler: when the engine is enabled and a cycle is due, run one. Opt-in;
+    nothing it does opens a trade — it only fills the review queue for the human to act on."""
+    while True:
+        try:
+            if alert_engine.enabled() and alert_engine.due():
+                await _alert_cycle()
+        except Exception:
+            log.exception("alert engine cycle failed")
+        await asyncio.sleep(ALERT_TICK_SECONDS)
+
+
 _paper_monitor: asyncio.Task | None = None
+_alert_task: asyncio.Task | None = None
 
 
 @app.on_event("startup")
 async def _startup() -> None:
-    global _paper_monitor
+    global _paper_monitor, _alert_task
     # Seed a fresh paper account from the user's capital on first run.
     if not paper.ACCOUNT_PATH.exists():
         paper.reset(load_settings().capital)
     # Seed the strategy-variation store (Baseline + Validated bull) so the picker has choices.
     strategy.ensure_seeded(load_settings())
     _paper_monitor = asyncio.create_task(paper.monitor_loop())
+    _alert_task = asyncio.create_task(_alert_loop())
 
 
 @app.on_event("shutdown")
@@ -393,3 +450,5 @@ async def _shutdown() -> None:
     await live.stop()
     if _paper_monitor:
         _paper_monitor.cancel()
+    if _alert_task:
+        _alert_task.cancel()

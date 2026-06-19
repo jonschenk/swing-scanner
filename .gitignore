@@ -44,3 +44,4 @@ backend/STRATEGY.md
 backend/paper_account.json
 backend/.backtest_cache/
 proposals.json
+alert_engine.json
