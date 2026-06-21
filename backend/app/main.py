@@ -12,6 +12,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .ai import analyze_all, analyze_single
@@ -473,3 +474,11 @@ async def _shutdown() -> None:
         _paper_monitor.cancel()
     if _alert_task:
         _alert_task.cancel()
+
+
+# Serve the built frontend (repo/frontend/dist) so the backend hosts the whole app — browse to the
+# server's address and you get the UI + API same-origin (no per-device URL config). Mounted LAST so
+# the /api/* routes above take precedence; only present when dist/ has been built (e.g. on the Pi).
+_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if _DIST.is_dir():
+    app.mount("/", StaticFiles(directory=_DIST, html=True), name="frontend")
