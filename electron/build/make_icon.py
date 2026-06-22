@@ -1,7 +1,6 @@
 """Generate the Bellwether app icon: a bell (the bellwether's bell) on a dark gradient
-squircle, in the app's green/blue palette, with a neon glow, a crown loop, a clapper, and a
-couple of little ringing lines that double as a nod to the alert engine. Rendered at 2x and
-downscaled for crisp anti-aliased edges. Outputs icon_1024.png and icon.ico."""
+squircle, in a warm brass/gold with a cool blue accent for the clapper and ringing lines.
+Rendered at 2x and downscaled for crisp anti-aliased edges. Outputs icon_1024.png and icon.ico."""
 
 import math
 
@@ -12,10 +11,10 @@ S = 1024        # final size
 W = S * SS      # working size
 RADIUS = int(W * 0.235)
 
-GREEN = (74, 222, 128)
-GREEN_HI = (170, 252, 200)   # bell top (bright mint)
-GREEN_LO = (46, 190, 120)    # bell bottom (emerald)
-ACCENT = (91, 140, 255)
+GOLD_HI = (255, 231, 150)    # bell top (bright warm gold)
+GOLD_LO = (210, 150, 60)     # bell bottom (deep brass)
+GLOW_GOLD = (250, 200, 110)  # warm glow
+ACCENT = (91, 140, 255)      # clapper + ringing lines (the app's blue)
 ACCENT_HI = (150, 182, 255)
 
 
@@ -52,26 +51,28 @@ img.paste(bg, (0, 0), mask)
 
 # ---- bell geometry (1024-space, centred on x=512) ----
 CX = 512.0
-Y_TOP = 360.0   # where the dome shoulders sit
-Y_RIM = 686.0   # top of the flared mouth
+Y_TOP = 372.0   # shoulder line
+Y_RIM = 688.0   # top of the flared mouth
 Y_BOT = 748.0   # bottom lip
+W_SH = 104.0    # shoulder half-width
+W_BODY = 196.0  # body growth target
 
 
 def half_at(u):
-    """Half-width of the body at fraction u (0 = shoulder, 1 = rim)."""
-    return 60 + 145 * (u ** 1.3) + 26 * smoothstep(0.62, 1.0, u)
+    """Half-width at fraction u (0 = shoulder, 1 = rim). The sin term bulges the shoulders out
+    early (full, rounded body, not a pinched cone); the smoothstep adds the rim flare."""
+    return W_SH + (W_BODY - W_SH) * math.sin(u * math.pi / 2) + 42 * smoothstep(0.74, 1.0, u)
 
 
 def bell_outline():
-    """A single closed polygon for the bell body: rounded dome, flaring sides, lipped mouth
-    with a gently open (concave-up) bottom."""
+    """A single closed polygon for the bell body: full rounded dome, bulging shoulders, flaring
+    lipped mouth with a gently open (concave-up) bottom."""
     rim_h = half_at(1.0)
     # rounded dome cap across the top (left shoulder -> right shoulder, bulging up)
     dome = []
     for i in range(25):
         t = i / 24
-        x = (CX - 60) + 120 * t
-        dome.append((x, Y_TOP - 40 * math.sin(math.pi * t)))
+        dome.append(((CX - W_SH) + 2 * W_SH * t, Y_TOP - 52 * math.sin(math.pi * t)))
     # right side, shoulder down to the rim
     right = []
     for i in range(65):
@@ -79,20 +80,20 @@ def bell_outline():
         right.append((CX + half_at(u), Y_TOP + (Y_RIM - Y_TOP) * u))
     right.append((CX + rim_h + 18, Y_RIM + 10))   # lip flares out
     right.append((CX + rim_h + 10, Y_BOT))         # down the lip
-    # open mouth: concave-up bottom edge, right lip -> left lip
+    # open mouth: gentle concave-up bottom edge, right lip -> left lip
     bottom = []
     x_r, x_l = CX + rim_h + 10, CX - (rim_h + 10)
     for i in range(29):
         t = i / 28
-        bottom.append((x_r + (x_l - x_r) * t, Y_BOT - 26 * math.sin(math.pi * t)))
+        bottom.append((x_r + (x_l - x_r) * t, Y_BOT - 16 * math.sin(math.pi * t)))
     left = [(2 * CX - px, py) for px, py in reversed(right)]
     return dome + right + bottom + left
 
 
 OUTLINE = bell_outline()
-CROWN = [472, 252, 552, 348]                 # crown loop bbox
-CLAP = (512, 768, 26)                         # clapper x, y, r
-RINGS = [((700, 372), (770, 344)), ((712, 420), (792, 410))]  # right-side ringing lines (mirrored)
+CROWN = [470, 250, 554, 350]                  # crown loop bbox
+CLAP = (512, 766, 26)                         # clapper x, y, r
+RINGS = [((704, 372), (774, 344)), ((716, 420), (796, 410))]  # right-side ringing lines (mirrored)
 
 
 def scaled(points):
@@ -102,8 +103,8 @@ def scaled(points):
 # ---- glow layer (bright shapes, blurred, composited underneath) ----
 glow = Image.new("RGBA", (W, W), (0, 0, 0, 0))
 gd = ImageDraw.Draw(glow)
-gd.polygon(scaled(OUTLINE), fill=GREEN + (255,))
-gd.ellipse([sc(v) for v in CROWN], outline=GREEN + (255,), width=int(sc(20)))
+gd.polygon(scaled(OUTLINE), fill=GLOW_GOLD + (255,))
+gd.ellipse([sc(v) for v in CROWN], outline=GLOW_GOLD + (255,), width=int(sc(20)))
 gd.ellipse([sc(CLAP[0] - CLAP[2]), sc(CLAP[1] - CLAP[2]), sc(CLAP[0] + CLAP[2]), sc(CLAP[1] + CLAP[2])],
            fill=ACCENT + (255,))
 for (ax, ay), (bx, by) in RINGS:
@@ -128,11 +129,11 @@ def grad_polygon(points, c_top, c_bot):
 
 
 # ---- bell body (gradient fill) ----
-grad_polygon(scaled(OUTLINE), GREEN_HI, GREEN_LO)
+grad_polygon(scaled(OUTLINE), GOLD_HI, GOLD_LO)
 
 # ---- crown loop (ring + a touch of sheen) ----
-draw.ellipse([sc(v) for v in CROWN], outline=GREEN_LO, width=int(sc(20)))
-draw.arc([sc(v) for v in CROWN], 150, 250, fill=GREEN_HI, width=int(sc(7)))
+draw.ellipse([sc(v) for v in CROWN], outline=GOLD_LO, width=int(sc(20)))
+draw.arc([sc(v) for v in CROWN], 150, 250, fill=GOLD_HI, width=int(sc(7)))
 
 # ---- clapper (accent dot + highlight) ----
 cx, cy, cr = CLAP
