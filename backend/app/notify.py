@@ -26,7 +26,7 @@ def _server() -> str:
     return os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 
 
-def send(message: str, title: str = "Swing Scanner", tags: str = "", priority: str = "default") -> None:
+def send(message: str, title: str = "Bellwether", tags: str = "", priority: str = "default") -> None:
     """Push a notification to the configured ntfy topic. No-op if NTFY_TOPIC is unset."""
     topic = _topic()
     if not topic:

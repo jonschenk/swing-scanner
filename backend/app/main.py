@@ -38,7 +38,7 @@ from .recommend import recommend, recheck
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="Swing Scanner")
+app = FastAPI(title="Bellwether")
 
 # The Electron app loads the UI from file:// (and the Vite dev server from
 # localhost), so allow any origin. The server binds to 127.0.0.1 only.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build "Swing Scanner.app" — a real macOS app you can keep in your Dock.
+# Build "Bellwether.app" — a real macOS app you can keep in your Dock.
 # The .app is a launcher around the existing backend/frontend in this folder,
 # so keep this project where it is after building.
 set -euo pipefail
@@ -25,10 +25,10 @@ echo "▸ Installing packaging tools…"
 # Bake this folder's absolute path so the packaged app finds the backend/frontend.
 printf '{\n  "projectRoot": "%s"\n}\n' "$ROOT" > electron/app-config.json
 
-echo "▸ Packaging Swing Scanner.app…"
+echo "▸ Packaging Bellwether.app…"
 (cd electron && npx --no-install electron-builder --mac --dir)
 
-APP="$(/usr/bin/find dist-app -maxdepth 2 -name 'Swing Scanner.app' -print -quit)"
+APP="$(/usr/bin/find dist-app -maxdepth 2 -name 'Bellwether.app' -print -quit)"
 if [ -z "$APP" ]; then
   echo "✗ Build finished but the .app wasn't found under dist-app/." >&2
   exit 1
@@ -36,15 +36,17 @@ fi
 
 # Install straight to /Applications and ad-hoc sign (so it runs on Apple Silicon).
 echo "▸ Installing to /Applications…"
-osascript -e 'quit app "Swing Scanner"' 2>/dev/null || true
-rm -rf "/Applications/Swing Scanner.app"
-cp -R "$APP" "/Applications/Swing Scanner.app"
-codesign --force --deep --sign - "/Applications/Swing Scanner.app" >/dev/null 2>&1 || true
+osascript -e 'quit app "Bellwether"' 2>/dev/null || true
+osascript -e 'quit app "Swing Scanner"' 2>/dev/null || true   # legacy (pre-rebrand) app
+rm -rf "/Applications/Bellwether.app"
+rm -rf "/Applications/Swing Scanner.app"                       # remove the old app if it's still around
+cp -R "$APP" "/Applications/Bellwether.app"
+codesign --force --deep --sign - "/Applications/Bellwether.app" >/dev/null 2>&1 || true
 
 # Remove the build output so a duplicate .app doesn't linger in Spotlight/Finder.
 rm -rf dist-app
 
 echo
-echo "✓ Installed: /Applications/Swing Scanner.app"
+echo "✓ Installed: /Applications/Bellwether.app"
 echo "  Launch it from Spotlight or Launchpad, or drag it from Applications to your Dock."
-open -R "/Applications/Swing Scanner.app"
+open -R "/Applications/Bellwether.app"

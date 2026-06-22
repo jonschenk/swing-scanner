@@ -1,8 +1,8 @@
 {
-  "name": "stock-scanner-app",
+  "name": "bellwether-app",
   "private": true,
   "version": "1.0.0",
-  "description": "Native macOS swing trading scanner",
+  "description": "Bellwether — regime-adaptive swing-trading scanner and paper-trading advisor",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -14,8 +14,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.jonschenk.swingscanner",
-    "productName": "Swing Scanner",
+    "appId": "com.jonschenk.bellwether",
+    "productName": "Bellwether",
     "directories": {
       "output": "../dist-app",
       "buildResources": "build"

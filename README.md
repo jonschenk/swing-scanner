@@ -1,4 +1,4 @@
-# Swing Scanner
+# Bellwether
 
 A desktop and self-hosted app that scans the whole US stock market for short-term swing trade setups, the kind you'd hold for two to five days. It reads the overall market regime, runs the strategy that fits that regime, uses AI to judge the best candidates, sizes each trade to your account, and can run as a hands-light advisor that proposes trades for you to approve. Everything trades on paper through a built-in simulator. It places no real orders, and a human approves every trade. The scan and its local AI run free on your own machine, with no API keys or accounts required for the core features.
 
@@ -91,8 +91,8 @@ The script creates a Python environment, installs the dependencies, sets up the 
 To package it into a real app you can pin to your Dock or Start menu:
 
 ```bash
-./build-app.sh      # macOS, produces Swing Scanner.app in /Applications
-.\build-app.ps1     # Windows, produces Swing Scanner.exe in dist-app\win-unpacked
+./build-app.sh      # macOS, produces Bellwether.app in /Applications
+.\build-app.ps1     # Windows, produces Bellwether.exe in dist-app\win-unpacked
 ```
 
 One caveat: the Windows build has to run on a Windows machine. You cannot cross-build it from a Mac.

@@ -151,7 +151,7 @@ async function createWindow() {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: "#0b0e14",
-    title: "Swing Scanner",
+    title: "Bellwether",
     // Inset traffic-light styling is macOS-only; Windows uses its native frame.
     ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" } : {}),
     webPreferences: {

@@ -1,4 +1,4 @@
-# Swing Scanner - Windows launcher (PowerShell).
+# Bellwether - Windows launcher (PowerShell).
 # Sets up anything missing, then launches the app. Run from PowerShell:
 #   .\start.ps1
 # If scripts are blocked, run once:  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -67,6 +67,6 @@ Pop-Location
 # --- electron ---
 Push-Location "electron"
 if (-not (Test-Path "node_modules")) { Write-Host "Installing Electron..."; npm install --silent }
-Write-Host "Launching Swing Scanner..."
+Write-Host "Launching Bellwether..."
 npm start
 Pop-Location

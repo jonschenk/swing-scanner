@@ -58,5 +58,5 @@ if [ ! -d electron/node_modules ]; then
   (cd electron && npm install --silent)
 fi
 
-echo "▸ Launching Swing Scanner…"
+echo "▸ Launching Bellwether…"
 cd electron && npm start

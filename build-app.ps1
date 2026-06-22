@@ -1,6 +1,6 @@
-# Build "Swing Scanner" as a Windows app (PowerShell). Run on a Windows machine:
+# Build "Bellwether" as a Windows app (PowerShell). Run on a Windows machine:
 #   .\build-app.ps1
-# Produces dist-app\win-unpacked\Swing Scanner.exe. The .exe is a launcher around
+# Produces dist-app\win-unpacked\Bellwether.exe. The .exe is a launcher around
 # the backend/frontend in this folder, so keep this project where it is.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
@@ -29,12 +29,12 @@ Pop-Location
 # Bake this folder's absolute path so the packaged app finds the backend/frontend.
 @{ projectRoot = $root } | ConvertTo-Json | Set-Content "electron\app-config.json"
 
-Write-Host "Packaging Swing Scanner..."
+Write-Host "Packaging Bellwether..."
 Push-Location "electron"
 npx --no-install electron-builder --win --dir
 Pop-Location
 
-$exe = "dist-app\win-unpacked\Swing Scanner.exe"
+$exe = "dist-app\win-unpacked\Bellwether.exe"
 if (Test-Path $exe) {
   Write-Host ""
   Write-Host "Built: $root\$exe"
