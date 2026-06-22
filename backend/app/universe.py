@@ -66,7 +66,7 @@ def _parse(text: str, sym_idx: int, name_idx: int, etf_idx: int, test_idx: int) 
 def fetch_full_universe(timeout: float = 20) -> list[str]:
     """Download + filter the full US common-stock universe. Raises on network error."""
     symbols: set[str] = set()
-    with httpx.Client(timeout=timeout, headers={"User-Agent": "swing-scanner/1.0"}) as client:
+    with httpx.Client(timeout=timeout, headers={"User-Agent": "bellwether/1.0"}) as client:
         r = client.get(NASDAQ_LISTED)
         r.raise_for_status()
         # Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot|ETF|NextShares
@@ -112,7 +112,7 @@ def _parse_names(text: str, sym_idx: int, name_idx: int, etf_idx: int, test_idx:
 
 def _fetch_names(timeout: float = 20) -> dict[str, str]:
     names: dict[str, str] = {}
-    with httpx.Client(timeout=timeout, headers={"User-Agent": "swing-scanner/1.0"}) as client:
+    with httpx.Client(timeout=timeout, headers={"User-Agent": "bellwether/1.0"}) as client:
         r = client.get(NASDAQ_LISTED)
         r.raise_for_status()
         names.update(_parse_names(r.text, sym_idx=0, name_idx=1, etf_idx=6, test_idx=3))
