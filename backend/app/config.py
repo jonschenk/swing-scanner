@@ -19,6 +19,11 @@ class ScanSettings(BaseModel):
     capital: float = Field(default=1000.0, gt=0)  # your trading capital ($)
     risk_pct: float = Field(default=2.0, gt=0, le=100)  # max % of capital to risk per trade
     max_position_pct: float = Field(default=50.0, gt=0, le=100)  # cap on price as % of capital
+    # Budget-aware allocation across a batch of picks (so the account isn't sized as if full cash
+    # were free for EACH entry). max_alloc_pct caps any one position's COST as % of equity (lets a
+    # small account hold several names + stops one tight-stop pick eating the whole book).
+    max_alloc_pct: float = Field(default=30.0, gt=0, le=100)
+    max_concurrent_positions: int = Field(default=4, ge=1, le=50)  # breadth cap (Fundamental Law: breadth extracts a modest edge)
     atr_stop_mult: float = Field(default=1.5, gt=0)  # stop = entry - mult * ATR
     reward_mult: float = Field(default=2.0, gt=0)  # target = entry + mult * stop distance
     cap_target_at_high: bool = Field(default=True)  # cap the target at the 52w high (off = pure R:R)

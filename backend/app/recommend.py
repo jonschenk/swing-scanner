@@ -86,15 +86,16 @@ def _positions_block(positions: list[dict] | None) -> str:
 
 def _build_prompt(candidates: list[dict], settings: ScanSettings, positions: list[dict] | None) -> str:
     lines = "\n".join(_candidate_line(s) for s in candidates)
+    n = getattr(settings, "max_concurrent_positions", 4)
     return f"""You are triaging a swing-trade scan for a trader who holds 2-5 days. Every name below already passed the technical screen (market leader, uptrend, healthy pullback). Your job is to pick the few worth focusing on TODAY and say what to skip — judging them against each other AND this specific account.
 
-ACCOUNT: ${settings.capital:,.0f} capital, {settings.risk_pct}% risk per trade.
+ACCOUNT: ${settings.capital:,.0f} capital, {settings.risk_pct}% risk per trade. This is a SMALL, SHARED account that can hold about {n} positions at once — every pick consumes cash the next one can't use, so do not treat the full balance as available for each. Propose a focused set that fits (up to ~{n}), prioritized best-first; quality and fit beat quantity.
 OPEN POSITIONS: {_positions_block(positions)}
 
 CANDIDATES (already ranked by the scanner's setup score):
 {lines}
 
-Pick the 2-4 you'd actually focus on, best first. Weigh: cleanliness of the entry, reward:risk, trend/volume quality, AND portfolio fit — don't recommend piling into a sector the account is already heavy in, and prefer names that diversify or have the best standalone setup.
+Pick the best set you'd actually focus on (up to ~{n}), best first. Weigh: cleanliness of the entry, reward:risk, trend/volume quality, AND portfolio fit — don't recommend piling into a sector the account is already heavy in, and prefer names that diversify or have the best standalone setup. Remember the account can only hold ~{n} positions, so be selective.
 
 For EACH pick, argue it like a desk would before committing capital: write the strongest BULL case for the trade, then the strongest BEAR case against it (what would actually make it fail — extended into resistance, thin volume, sector already heavy, fragile pattern), and only then your verdict. A name earns "Take" only when the bull case genuinely survives the bear case; if the bear case has real teeth, call it "Watch" or leave it out. This adversarial step is the point — do not skip the bear case or make it a throwaway. Give each pick a one-sentence reason (the verdict), a Take or Watch call, and a conviction. Then a short overall summary and a note on what to skip and why. Only use tickers from the list. Be selective — if only one or two survive the debate, recommend only those."""
 

@@ -22,6 +22,9 @@ KELLY_MIN_SAMPLE = 20       # need this many CLOSED trades before sizing on a me
 KELLY_MAX_RISK_PCT = 2.0    # hard ceiling: dynamic sizing can never risk more than this per trade
 KELLY_MIN_RISK_PCT = 0.5    # floor: below this a position is too small to bother with
 
+# Headroom left when sizing to available cash, so slippage + quote drift at the fill don't overshoot.
+ALLOC_CASH_BUFFER = 0.005   # 0.5%
+
 
 def kelly_risk_pct(base_risk_pct: float, stats: dict | None) -> tuple[float, str]:
     """Fractional-Kelly per-trade risk %, derived from a variation's MEASURED edge.
@@ -112,3 +115,59 @@ def position_plan(
         # one share — the trade is too volatile for this account size.
         "undersized": undersized,
     }
+
+
+def resize_for_budget(plan: dict, settings: ScanSettings, equity: float,
+                      cash_available: float) -> dict | None:
+    """Re-size a single trade plan to fit a real budget. Risk is taken off CURRENT equity (so it
+    compounds), share count is then capped by BOTH the affordable cash and a per-position cost cap
+    (max_alloc_pct of equity), so one tight-stop name can't swallow the account. Only the share
+    count + derived $ fields change — entry/stop/target/stop_distance are untouched, so the trade's
+    R-multiple is identical (this is pure capital allocation, not a strategy change). Returns the
+    re-sized plan, or None if not even one share fits the cash/cap."""
+    entry = plan.get("entry")
+    stop_distance = plan.get("stop_distance")
+    if not entry or not stop_distance or entry <= 0 or stop_distance <= 0:
+        return None
+    risk_budget = equity * settings.risk_pct / 100
+    shares_by_risk = math.floor(risk_budget / stop_distance)
+    # Affordability buffers a little above the quote: the actual fill adds slippage and the quote can
+    # drift a hair between sizing and the buy, so a position sized to the exact cash would overshoot.
+    shares_affordable = math.floor(cash_available / (entry * (1 + ALLOC_CASH_BUFFER)))
+    shares_by_alloc = math.floor((equity * settings.max_alloc_pct / 100) / entry)
+    shares = min(shares_by_risk, shares_affordable, shares_by_alloc)
+    if shares < 1:
+        return None  # can't fit even one share within the cash + allocation cap
+    cost = shares * entry
+    return {
+        **plan,
+        "shares": shares,
+        "position_cost": round(cost, 2),
+        "position_pct": round(cost / equity * 100, 1),
+        "risk_dollars": round(shares * stop_distance, 2),
+        "risk_pct": round(shares * stop_distance / equity * 100, 1),
+        "undersized": False,
+    }
+
+
+def allocate(rows: list[dict], settings: ScanSettings, equity: float, cash: float,
+             max_positions: int | None = None) -> tuple[list[dict], list[dict]]:
+    """Budget-aware portfolio allocation across a RANKED batch of picks (best first). Walks the
+    picks in order, re-sizing each off the running remaining cash + the per-position cap, taking up
+    to `max_positions`. The highest-conviction picks fill first; anything that no longer fits the
+    budget is dropped DETERMINISTICALLY by rank (not by arbitrary cash-exhaustion order). Each row
+    must carry a `plan` (from the scan). Returns (taken, dropped); taken rows get the re-sized plan."""
+    cap = max_positions if max_positions is not None else settings.max_concurrent_positions
+    remaining = cash
+    taken, dropped = [], []
+    for r in rows:
+        if len(taken) >= cap:
+            dropped.append({"ticker": r["ticker"], "reason": "position cap reached"})
+            continue
+        sized = resize_for_budget(r.get("plan") or {}, settings, equity, remaining)
+        if sized is None:
+            dropped.append({"ticker": r["ticker"], "reason": "does not fit remaining budget"})
+            continue
+        taken.append({**r, "plan": sized})
+        remaining -= sized["position_cost"]
+    return taken, dropped

@@ -562,23 +562,32 @@ async def _nightly_build() -> None:
     eventlog.log_event("scan", f"evening scan: {len(rows)} setups cleared ({strat})", count=len(rows), strategy=strat)
 
     proposed: list[str] = []
-    max_pos = alert_engine.state().get("max_positions", 5)
+    settings = load_settings()
+    equity = paper.account().get("equity") or settings.capital
+    max_pos = settings.max_concurrent_positions
     if rows:
         positions = [{"ticker": p["ticker"], "shares": p["shares"]} for p in paper.account().get("positions", [])]
-        rec = await recommend(rows, load_settings(), positions)  # bull/bear debate
+        rec = await recommend(rows, settings, positions)  # bull/bear debate (budget/position-count aware)
         if not rec.get("error"):
             picks = {p["ticker"]: p for p in rec.get("picks", [])}
             for r in rows:
                 r["recommendation"] = picks.get(r["ticker"])
             picked = [r for r in rows if r["ticker"] in picks]
-            res = review_queue.build(picked, regime, strat, top_n=max_pos, trading_day=trading_day)
-            proposed = res.get("added_tickers", [])
             eventlog.log_event("propose", f"AI debate picked {len(picked)} of {len(rows)}",
                                picks={t: (p.get("call"), p.get("conviction")) for t, p in picks.items()})
         else:
             eventlog.log_event("error", f"AI debate unavailable ({rec.get('summary')}) — proposing top mechanical setups")
-            res = review_queue.build(rows, regime, strat, top_n=max_pos, trading_day=trading_day)
-            proposed = res.get("added_tickers", [])
+            picked = rows
+        # Size each pick to the budget (per-position cap off equity) so the proposed plan is realistic,
+        # not sized as if the full account were free for it. Propose a small buffer above the position
+        # cap so the human has a couple of alternates and a morning veto doesn't leave the book short.
+        sized_picks = []
+        for r in picked:
+            sp = risk.resize_for_budget(r.get("plan") or {}, settings, equity, equity)
+            if sp:
+                sized_picks.append({**r, "plan": sp})
+        res = review_queue.build(sized_picks, regime, strat, top_n=max_pos + 2, trading_day=trading_day)
+        proposed = res.get("added_tickers", [])
     alert_engine.record("built", regime=regime, strategy=strat, new_tickers=proposed)
     alert_engine.mark_nightly_build()
     eventlog.log_event("propose", f"proposed {len(proposed)} ticket(s) for {trading_day}: {', '.join(proposed) or 'none'}",
@@ -608,8 +617,14 @@ async def _nightly_morning() -> None:
         eventlog.log_event("execute", "morning: no approved tickets to execute")
         return
 
-    tickers = [p["ticker"] for p in approved]
-    prices = await asyncio.to_thread(paper._quote, tickers)
+    settings = load_settings()
+    acct = paper.account()
+    equity, cash = acct["equity"], acct["cash"]
+    # Best-conviction first, so the budget flows to the strongest picks (and weaker ones drop by rank).
+    conv_rank = {"High": 0, "Medium": 1, "Low": 2}
+    approved = sorted(approved, key=lambda p: (conv_rank.get(p.get("conviction"), 1), -(p.get("score") or 0)))
+
+    prices = await asyncio.to_thread(paper._quote, [p["ticker"] for p in approved])
     payload = []
     for p in approved:
         plan = p.get("plan") or {}
@@ -622,7 +637,8 @@ async def _nightly_morning() -> None:
     if rc.get("error"):
         eventlog.log_event("error", f"AI re-check unavailable ({rc.get('summary')}) — mechanical gate only")
 
-    bought, skipped, vid = [], [], None
+    # Gate each name (mechanical + AI). Survivors carry a plan RE-PRICED to the actual open.
+    survivors, skipped = [], []
     for p in approved:
         plan = p.get("plan") or {}
         cur, stop, target = prices.get(p["ticker"]), plan.get("stop"), plan.get("target")
@@ -639,18 +655,33 @@ async def _nightly_morning() -> None:
         if v and not v.get("proceed"):
             review_queue.mark(p["id"], "skipped", f"AI stand-down: {v.get('reason')}")
             skipped.append(p["ticker"]); eventlog.log_event("recheck", f"{p['ticker']} AI stand-down: {v.get('reason')}"); continue
-        # Execute: market buy at the open. Tag with the router leg + the regime's Kelly params.
-        strat = p.get("strategy") or "leader_pullback"
+        open_plan = {**plan, "entry": round(cur, 2), "stop_distance": round(cur - stop, 2)}  # size off the real open
+        survivors.append({**p, "plan": open_plan})
+
+    # Budget-aware allocation across survivors: conviction order, off REAL cash + the per-position cap,
+    # so the picks actually fit the account instead of each being sized as if full cash were free.
+    taken, dropped = risk.allocate(survivors, settings, equity, cash, settings.max_concurrent_positions)
+    for d in dropped:
+        sp = next((s for s in survivors if s["ticker"] == d["ticker"]), None)
+        if sp:
+            review_queue.mark(sp["id"], "skipped", d["reason"]); skipped.append(d["ticker"])
+            eventlog.log_event("skip", f"{d['ticker']} not traded: {d['reason']}")
+
+    bought = []
+    for t in taken:
+        strat = t.get("strategy") or "leader_pullback"
         vid = f"router-{strat}+ai"
-        params = {**router.for_regime(p.get("regime"))[1], "risk_pct": plan.get("risk_pct")}
-        res = await asyncio.to_thread(paper.buy, p["stock"], vid, params)
+        params = {**router.for_regime(t.get("regime"))[1], "risk_pct": settings.risk_pct}
+        stock = {**t["stock"], "plan": t["plan"]}  # the budget-sized plan drives the buy
+        res = await asyncio.to_thread(paper.buy, stock, vid, params)
         if res.get("error"):
-            review_queue.mark(p["id"], "skipped", f"execution failed: {res['error']}")
-            skipped.append(p["ticker"]); eventlog.log_event("skip", f"{p['ticker']} execution failed: {res['error']}"); continue
-        review_queue.mark(p["id"], "executed", f"bought at ~${cur}")
-        bought.append(p["ticker"])
-        eventlog.log_event("execute", f"bought {p['ticker']} at ~${cur}", ticker=p["ticker"], price=cur,
-                           reason=(v or {}).get("reason"))
+            review_queue.mark(t["id"], "skipped", f"execution failed: {res['error']}")
+            skipped.append(t["ticker"]); eventlog.log_event("skip", f"{t['ticker']} execution failed: {res['error']}"); continue
+        pl = t["plan"]
+        review_queue.mark(t["id"], "executed", f"{pl['shares']} sh ≈ ${pl['position_cost']} ({pl['position_pct']}%)")
+        bought.append(t["ticker"])
+        eventlog.log_event("execute", f"bought {pl['shares']} {t['ticker']} ≈ ${pl['position_cost']} ({pl['position_pct']}% of book)",
+                           ticker=t["ticker"], shares=pl["shares"], cost=pl["position_cost"])
 
     alert_engine.record("executed", strategy=(approved[0].get("strategy") if approved else None), new_tickers=bought)
     alert_engine.mark_nightly_exec()
