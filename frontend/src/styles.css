@@ -27,6 +27,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
+  text-transform: lowercase;  /* stylistic: lowercase everything */
 }
 
 .app {
@@ -229,7 +230,7 @@ body {
 .strat-active-tag {
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.03em;
   color: var(--accent);
 }
@@ -714,7 +715,7 @@ body {
 .tc-label {
   display: block;
   font-size: 11px;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
   margin-bottom: 1px;
@@ -809,7 +810,7 @@ body {
   font-weight: 500;
   color: var(--text-muted);
   font-size: 11px;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.03em;
   padding: 4px 8px;
   border-bottom: 1px solid var(--border);
@@ -910,7 +911,7 @@ body {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.03em;
 }
 
@@ -1185,7 +1186,7 @@ body {
 .plan-title {
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.6px;
   color: var(--text-muted);
 }
@@ -1220,7 +1221,7 @@ body {
 
 .lvl-label {
   font-size: 10px;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
   font-weight: 500;
@@ -1242,7 +1243,7 @@ body {
 
 .stat-label {
   font-size: 11px;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
 }
@@ -1348,7 +1349,7 @@ body {
 .group-title {
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.6px;
   color: var(--text-muted);
   margin-top: 6px;

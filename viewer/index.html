@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Bellwether" />
+<meta name="apple-mobile-web-app-title" content="bellwether" />
 <meta name="theme-color" content="#0b0e14" />
-<title>Bellwether Monitor</title>
+<title>bellwether</title>
 <style>
   :root {
     --bg: #0b0e14; --card: #131722; --raised: #1a2030; --border: #232a3a;
@@ -19,6 +19,7 @@
     margin: 0; background: var(--bg); color: var(--text); font-variant-numeric: tabular-nums;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px);
+    text-transform: lowercase;  /* stylistic: lowercase everything */
   }
   .wrap { max-width: 720px; margin: 0 auto; padding: 14px; }
   header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
@@ -92,7 +93,7 @@
 <div class="wrap">
   <header>
     <span class="dot"></span>
-    <h1>Bellwether Monitor</h1>
+    <h1>bellwether</h1>
     <span id="regime"></span>
     <button class="gear" onclick="openDrawer()">⚙</button>
   </header>

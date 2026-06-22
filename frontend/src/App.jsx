@@ -602,7 +602,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-dot" />
-          <h1>Bellwether</h1>
+          <h1>bellwether</h1>
           {regime?.available && (
             <span
               className={`regime-badge regime-${regime.regime}`}
