@@ -30,7 +30,7 @@ DEFAULTS = {
     "mode": "review",        # "review" = fill the queue for approval; "auto" = auto-open PAPER positions
     "max_positions": 5,      # auto mode: cap on concurrent open paper positions
     "open_buffer_min": 30,   # don't act until this many minutes after the 9:30 ET open (skip the volatile open)
-    "ai_picks": False,       # auto mode: run Claude over the mechanical finalists, trade only its "Take" picks
+    "ai_picks": True,        # auto mode: run Claude over the mechanical finalists, trade only its "Take" picks (always on — the point is AI-informed picks)
     "last_run": None,        # ISO timestamp of the last completed run
     "last_status": "idle",   # idle | watching | warming-up | market-closed | bear-cash | auto-traded | error
     "last_regime": None,
