@@ -19,7 +19,6 @@ import asyncio
 import datetime as dt
 import json
 import logging
-import time
 import uuid
 from pathlib import Path
 
@@ -51,7 +50,6 @@ TICK_SECONDS = 5  # how often the bracket monitor re-marks open positions
 # fills are exempt (you get your price or better — that's the point of using one).
 SLIPPAGE_BPS = 5.0
 
-_regime_cache: tuple[float, str] | None = None  # (fetched_at, label), refreshed ~hourly
 
 
 def _load() -> dict:
@@ -390,21 +388,13 @@ def _active_variation() -> tuple[str, dict | None]:
 
 
 def _market_regime() -> str | None:
-    """Broad-market regime label from SPY (uptrend / downtrend / choppy), cached ~1h. Stored on
-    each trade so outcomes can later be sliced by the regime they were taken in."""
-    global _regime_cache
-    if _regime_cache and time.time() - _regime_cache[0] < 3600:
-        return _regime_cache[1]
+    """The router's regime label (bull / chop / bear) for the trade tag — the SAME classifier that
+    drove the strategy choice, so outcomes slice consistently against the logic. Cached ~1h in
+    regime.current_regime(). None if SPY can't be classified."""
     try:
-        import yfinance as yf
-
-        close = yf.Ticker("SPY").history(period="1y")["Close"]
-        sma200 = close.rolling(200).mean()
-        c, s = float(close.iloc[-1]), float(sma200.iloc[-1])
-        rising = sma200.iloc[-1] > sma200.iloc[-22]
-        label = "uptrend" if (c > s and rising) else "downtrend" if (c < s and not rising) else "choppy"
-        _regime_cache = (time.time(), label)
-        return label
+        from . import regime
+        r = regime.current_regime()
+        return r["regime"] if r.get("available") else None
     except Exception:
-        log.exception("market regime fetch failed")
+        log.exception("market regime lookup failed")
         return None

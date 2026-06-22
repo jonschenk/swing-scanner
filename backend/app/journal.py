@@ -49,6 +49,7 @@ def _save(trades: list[dict]) -> None:
 ENTRY_SNAPSHOT_FIELDS = [
     "price", "rsi", "adx", "atr_pct", "rs_rating", "pct_from_high",
     "rel_volume", "pct_above_sma50", "sma20", "sma50", "sma200", "setup_score",
+    "rsi2", "stretch_pct",  # mean-reversion entry conditions (None for leader-pullback trades)
 ]
 # Trade-case fields kept at entry, so the advisor's calls can be graded against outcomes.
 _TRADE_CASE_KEEP = ["recommendation", "conviction", "thesis", "key_risks", "bottom_line"]
@@ -82,6 +83,7 @@ def log_trade(
         "id": uuid.uuid4().hex[:8],
         "ticker": stock["ticker"],
         "name": stock.get("name", ""),
+        "strategy": stock.get("strategy", "leader_pullback"),  # leader_pullback | mean_reversion — the key slice
         "variation_id": variation_id,
         "variation_params": variation_params,  # the strategy knobs in effect at entry
         "decision": decision or (tc.get("recommendation") if tc else None),

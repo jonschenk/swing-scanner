@@ -25,6 +25,7 @@ from . import strategy
 from . import queue as review_queue
 from . import alert_engine
 from . import notify
+from . import equity_log
 from .live import live
 from .scanner import refresh_results, scan_market
 from .trade_case import trade_case
@@ -309,6 +310,12 @@ async def journal_view() -> dict:
     return {"trades": journal.list_trades(), "summary": journal.summary_by_variation()}
 
 
+@app.get("/api/equity-log")
+async def equity_log_view() -> dict:
+    """Daily equity-curve + SPY-benchmark snapshots for the forward paper-proving period."""
+    return {"rows": equity_log.rows()}
+
+
 @app.get("/api/paper/account")
 async def paper_account() -> dict:
     return paper.account()
@@ -455,6 +462,9 @@ async def _alert_loop() -> None:
         try:
             if alert_engine.enabled() and alert_engine.due():
                 await _alert_cycle()
+            # Daily equity-curve snapshot (self-dedups per ET day; runs even when the engine is off,
+            # so the forward equity curve / drawdown / SPY benchmark keep accruing regardless).
+            await asyncio.to_thread(equity_log.maybe_record_eod)
         except Exception:
             log.exception("alert engine cycle failed")
         await asyncio.sleep(ALERT_TICK_SECONDS)
