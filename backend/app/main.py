@@ -563,10 +563,17 @@ async def _nightly_build() -> None:
 
     proposed: list[str] = []
     settings = load_settings()
-    equity = paper.account().get("equity") or settings.capital
-    max_pos = settings.max_concurrent_positions
-    if rows:
-        positions = [{"ticker": p["ticker"], "shares": p["shares"]} for p in paper.account().get("positions", [])]
+    acct = paper.account()
+    equity, cash, held = acct.get("equity") or settings.capital, acct.get("cash") or 0.0, len(acct.get("positions", []))
+    free_slots = max(0, settings.max_concurrent_positions - held)
+    note = None  # why nothing was proposed (for the event/notify line)
+    if not rows:
+        note = "no setups cleared the scan"
+    elif free_slots == 0:
+        note = f"fully invested ({held} positions) — no free slot"
+        eventlog.log_event("propose", f"holding — {held} positions open, no free slot for new setups")
+    else:
+        positions = [{"ticker": p["ticker"], "shares": p["shares"]} for p in acct.get("positions", [])]
         rec = await recommend(rows, settings, positions)  # bull/bear debate (budget/position-count aware)
         if not rec.get("error"):
             picks = {p["ticker"]: p for p in rec.get("picks", [])}
@@ -578,25 +585,27 @@ async def _nightly_build() -> None:
         else:
             eventlog.log_event("error", f"AI debate unavailable ({rec.get('summary')}) — proposing top mechanical setups")
             picked = rows
-        # Size each pick to the budget (per-position cap off equity) so the proposed plan is realistic,
-        # not sized as if the full account were free for it. Propose a small buffer above the position
-        # cap so the human has a couple of alternates and a morning veto doesn't leave the book short.
+        # Size each pick to the ACTUAL free cash + the per-position cap, so we never propose what the
+        # account can't fund. Fully/over-invested -> nothing fits -> nothing proposed (as expected).
+        # Propose a small buffer above the free slots for alternates / morning vetoes.
         sized_picks = []
         for r in picked:
-            sp = risk.resize_for_budget(r.get("plan") or {}, settings, equity, equity)
+            sp = risk.resize_for_budget(r.get("plan") or {}, settings, equity, cash)
             if sp:
                 sized_picks.append({**r, "plan": sp})
-        res = review_queue.build(sized_picks, regime, strat, top_n=max_pos + 2, trading_day=trading_day)
+        res = review_queue.build(sized_picks, regime, strat, top_n=free_slots + 2, trading_day=trading_day)
         proposed = res.get("added_tickers", [])
+        if not proposed:
+            note = f"no setups fit the free cash (${cash:,.0f})"
     alert_engine.record("built", regime=regime, strategy=strat, new_tickers=proposed)
     alert_engine.mark_nightly_build()
-    eventlog.log_event("propose", f"proposed {len(proposed)} ticket(s) for {trading_day}: {', '.join(proposed) or 'none'}",
+    eventlog.log_event("propose", f"proposed {len(proposed)} ticket(s) for {trading_day}: {', '.join(proposed) or note or 'none'}",
                        trading_day=trading_day, tickers=proposed)
     if proposed:
         notify.send(f"{len(proposed)} setup{'s' if len(proposed) != 1 else ''} for {trading_day}: {', '.join(proposed)}. Review tonight.",
                     title=f"Nightly · {regime} → {strat}", tags="memo")
     else:
-        notify.send(f"No setups cleared for {trading_day}.", title="Nightly · nothing tonight", tags="zzz")
+        notify.send(f"No new setups for {trading_day} ({note}).", title="Nightly · holding", tags="zzz")
 
 
 async def _nightly_morning() -> None:
@@ -660,7 +669,9 @@ async def _nightly_morning() -> None:
 
     # Budget-aware allocation across survivors: conviction order, off REAL cash + the per-position cap,
     # so the picks actually fit the account instead of each being sized as if full cash were free.
-    taken, dropped = risk.allocate(survivors, settings, equity, cash, settings.max_concurrent_positions)
+    # The breadth cap is on the WHOLE book, so subtract positions already open.
+    free_slots = max(0, settings.max_concurrent_positions - len(acct.get("positions", [])))
+    taken, dropped = risk.allocate(survivors, settings, equity, cash, free_slots)
     for d in dropped:
         sp = next((s for s in survivors if s["ticker"] == d["ticker"]), None)
         if sp:
