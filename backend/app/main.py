@@ -26,6 +26,7 @@ from . import queue as review_queue
 from . import alert_engine
 from . import notify
 from . import equity_log
+from . import router
 from .live import live
 from .scanner import refresh_results, scan_market
 from .trade_case import trade_case
@@ -65,14 +66,19 @@ def _set_progress(message: str) -> None:
     log.info(message)
 
 
-async def _run_scan(force_fresh: bool = False, scan_strategy: str = "leader_pullback") -> None:
-    # The scan runs under the ACTIVE strategy variation (its knobs overlaid on the account
-    # settings), so the picker actually drives the scan. Account fields (capital/universe/AI)
-    # stay from settings.json. `scan_strategy` picks the signal family (leader-pullback vs
-    # mean-reversion); the variation's knobs (e.g. atr_stop_mult) still apply.
-    settings = strategy.apply_active(load_settings())
-    active = strategy.get_active()
-    scan_state["variation"] = {"id": active["id"], "name": active["name"]} if active else None
+async def _run_scan(force_fresh: bool = False, scan_strategy: str = "leader_pullback",
+                    params_override: dict | None = None) -> None:
+    # Params come from one of two places. The AUTONOMOUS engine passes the validated router params
+    # for the current regime (params_override) — fully automatic, no human picking. A MANUAL scan
+    # (the full app's Run Scan) uses the active strategy variation (the dev/research picker).
+    # Account fields (capital/universe/AI) always come from settings.json.
+    if params_override is not None:
+        settings = load_settings().model_copy(update=params_override)
+        scan_state["variation"] = {"id": f"router-{scan_strategy}", "name": "Validated router"}
+    else:
+        settings = strategy.apply_active(load_settings())
+        active = strategy.get_active()
+        scan_state["variation"] = {"id": active["id"], "name": active["name"]} if active else None
     scan_state["strategy"] = scan_strategy
     reg = regime_mod.current_regime()
     scan_state["regime_label"] = reg.get("regime") if reg.get("available") else None
@@ -433,18 +439,20 @@ async def _alert_cycle() -> None:
         alert_engine.mark("error")  # can't classify right now; retry next tick
         return
     regime = reg["regime"]
-    if regime == "bear":
-        alert_engine.record("bear-cash", regime=regime, strategy="cash")  # sit out, queue nothing
+    # The router picks the strategy AND its validated params for this regime — fully automatic.
+    strat, params = router.for_regime(regime)
+    if strat == "cash":  # bear -> sit out, trade nothing (the kill-switch)
+        alert_engine.record("bear-cash", regime=regime, strategy="cash")
         return
-    strat = "mean_reversion" if regime == "chop" else "leader_pullback"
-    await _run_scan(force_fresh=False, scan_strategy=strat)
+    await _run_scan(force_fresh=False, scan_strategy=strat, params_override=params)
     rows = scan_state.get("results") or []
     exclude = alert_engine.exclude_today()
     if alert_engine.auto_mode():
-        # PAPER-ONLY auto-execute: open positions for the gated setups (the kill-switch already
-        # returned for bear above). Nothing here can reach a real broker.
+        # PAPER-ONLY auto-execute: open positions for the gated setups. Trades are tagged with the
+        # router leg + its validated params so the journal records exactly what ran.
         st = alert_engine.state()
-        res = await asyncio.to_thread(paper.auto_execute, rows, st.get("max_positions", 5), exclude)
+        res = await asyncio.to_thread(paper.auto_execute, rows, st.get("max_positions", 5), exclude,
+                                      f"router-{strat}", params)
         bought = res.get("bought", [])
         alert_engine.record("auto-traded", regime=regime, strategy=strat, new_tickers=bought)
         if bought:

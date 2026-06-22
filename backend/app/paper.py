@@ -84,9 +84,12 @@ def _quote(tickers: list[str]) -> dict[str, float]:
     return out
 
 
-def _open_position(acct: dict, stock: dict, fill: float) -> dict:
+def _open_position(acct: dict, stock: dict, fill: float,
+                   variation_id: str | None = None, variation_params: dict | None = None) -> dict:
     """Open a position in `acct` at `fill` (filled price already incl. any slippage), logging the
-    trade to the journal. Mutates acct; the caller saves. Returns {trade} or {error}."""
+    trade to the journal. Mutates acct; the caller saves. Returns {trade} or {error}.
+    `variation_id`/`variation_params` tag the trade with what actually ran (the engine passes the
+    router leg); a manual buy leaves them None and falls back to the active picker variation."""
     plan = stock.get("plan") or {}
     shares = plan.get("shares") or 0
     fill = round(fill, 2)
@@ -96,7 +99,7 @@ def _open_position(acct: dict, stock: dict, fill: float) -> dict:
 
     sized = dict(stock)
     sized["plan"] = {**plan, "entry": fill}
-    vid, vparams = _active_variation()
+    vid, vparams = (variation_id, variation_params) if variation_id else _active_variation()
     trade = journal.log_trade(
         sized, vid,
         variation_params=vparams,
@@ -120,7 +123,7 @@ def _open_position(acct: dict, stock: dict, fill: float) -> dict:
     return {"trade": trade}
 
 
-def buy(stock: dict) -> dict:
+def buy(stock: dict, variation_id: str | None = None, variation_params: dict | None = None) -> dict:
     """Place a paper MARKET buy: fill immediately at the live quote (+slippage). Returns the
     account snapshot or an {error}."""
     plan = stock.get("plan") or {}
@@ -131,14 +134,15 @@ def buy(stock: dict) -> dict:
         return {"error": "Could not get a fill price (market may be closed)."}
     fill = fill * (1 + SLIPPAGE_BPS / 10000)  # market buy pays up (slippage)
     acct = _load()
-    res = _open_position(acct, stock, fill)
+    res = _open_position(acct, stock, fill, variation_id, variation_params)
     if res.get("error"):
         return res
     _save(acct)
     return account()
 
 
-def place_order(stock: dict, order_type: str, limit_price: float | None = None) -> dict:
+def place_order(stock: dict, order_type: str, limit_price: float | None = None,
+                variation_id: str | None = None, variation_params: dict | None = None) -> dict:
     """Place a RESTING paper order that fills later: 'moo' at the next market open, 'limit' when
     the price reaches the planned entry. The monitor loop fills it (see _process_orders)."""
     plan = stock.get("plan") or {}
@@ -159,6 +163,8 @@ def place_order(stock: dict, order_type: str, limit_price: float | None = None) 
         "stop": plan.get("stop"),
         "target": plan.get("target"),
         "stock": stock,                           # snapshot so the fill can open + journal it
+        "variation_id": variation_id,             # carried to the fill so the journal tags it right
+        "variation_params": variation_params,
         "placed_at": _now(),
         # the ET session date if placed during market hours, else None (placed while closed)
         "placed_session": _et_today() if _market_open() else None,
@@ -167,14 +173,14 @@ def place_order(stock: dict, order_type: str, limit_price: float | None = None) 
     return account()
 
 
-def submit(stock: dict, settings) -> dict:
+def submit(stock: dict, settings, variation_id: str | None = None, variation_params: dict | None = None) -> dict:
     """Dispatch a paper order per the account's order-type preference: market fills now;
     moo/limit rest until their condition. The one entry point used by manual buys, the queue's
     Approve, and auto-trade — so all three honour the chosen order type."""
     otype = getattr(settings, "paper_order_type", "market")
     if otype in ("moo", "limit"):
-        return place_order(stock, otype)
-    return buy(stock)
+        return place_order(stock, otype, variation_id=variation_id, variation_params=variation_params)
+    return buy(stock, variation_id, variation_params)
 
 
 def cancel_order(order_id: str) -> dict:
@@ -185,11 +191,13 @@ def cancel_order(order_id: str) -> dict:
     return account()
 
 
-def auto_execute(results: list[dict], max_positions: int = 5, exclude: set[str] | None = None) -> dict:
+def auto_execute(results: list[dict], max_positions: int = 5, exclude: set[str] | None = None,
+                 variation_id: str | None = None, variation_params: dict | None = None) -> dict:
     """Auto-open PAPER positions for the best setups, with guardrails. PAPER-ONLY by construction —
     this only ever calls the paper buy() path; it has no route to a real broker. Used by the alert
-    engine's auto-trade mode. Guardrails: cap concurrent positions, skip names already held / in
-    `exclude` / flagged for imminent earnings / unsizable. Returns what it bought + why it skipped."""
+    engine's auto-trade mode. `variation_id`/`variation_params` tag each trade with what ran (the
+    router leg). Guardrails: cap concurrent positions, skip names already held / in `exclude` /
+    flagged for imminent earnings / unsizable. Returns what it bought + why it skipped."""
     from .config import load_settings
     settings = load_settings()
     exclude = exclude or set()
@@ -213,7 +221,7 @@ def auto_execute(results: list[dict], max_positions: int = 5, exclude: set[str] 
         if not (r.get("plan") or {}).get("shares"):
             skipped.append({"ticker": ticker, "reason": "not sizable"})
             continue
-        res = submit(r, settings)  # honours the order type (market fills now; moo/limit rest)
+        res = submit(r, settings, variation_id, variation_params)  # honours the order type; tags the trade
         if res.get("error"):
             skipped.append({"ticker": ticker, "reason": res["error"]})
             continue
@@ -306,7 +314,7 @@ def _process_orders(acct: dict, prices: dict[str, float]) -> bool:
                 fill_px = round(px * (1 + SLIPPAGE_BPS / 10000), 2)  # market-on-open pays up
         if fill_px is None:
             continue
-        res = _open_position(acct, o["stock"], fill_px)
+        res = _open_position(acct, o["stock"], fill_px, o.get("variation_id"), o.get("variation_params"))
         if res.get("error"):
             log.warning("dropping paper order for %s: %s", o["ticker"], res["error"])
         del acct["orders"][oid]
