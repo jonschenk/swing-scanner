@@ -65,3 +65,11 @@ export const paperReset = (capital) =>
 export const startLive = () => request("/api/live/start", { method: "POST" });
 export const stopLive = () => request("/api/live/stop", { method: "POST" });
 export const getLivePrices = () => request("/api/live");
+
+// Schwab (read-only): connect a real brokerage account for live balance/positions. Never trades.
+export const getSchwabStatus = () => request("/api/schwab/status");
+export const getSchwabAuthUrl = () => request("/api/schwab/auth-url");
+export const postSchwabCallback = (callback_url) =>
+  request("/api/schwab/callback", { method: "POST", body: JSON.stringify({ callback_url }) });
+export const postSchwabDisconnect = () => request("/api/schwab/disconnect", { method: "POST" });
+export const getPortfolio = () => request("/api/portfolio");

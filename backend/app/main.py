@@ -30,6 +30,7 @@ from . import router
 from . import risk
 from . import eventlog
 from . import daily_notes
+from . import schwab
 from .live import live
 from .scanner import refresh_results, scan_market
 from .trade_case import trade_case
@@ -431,6 +432,56 @@ async def events(day: str | None = None, n: int = 200) -> dict:
     """The engine's chronological audit trail — every move it made. `day` (YYYY-MM-DD ET) returns
     that day's events oldest-first; otherwise the most recent `n` events newest-first."""
     return {"events": eventlog.for_day(day) if day else eventlog.tail(n)}
+
+
+# ---- Schwab (READ-ONLY): connect a real brokerage account for live account value + positions ----
+# Decision-support only — surfaces balances/positions to feed sizing; it NEVER places orders. The
+# paper broker still executes everything. OAuth tokens are stored encrypted by schwab.py.
+class SchwabCallback(BaseModel):
+    callback_url: str  # full https://127.0.0.1?code=... redirect (or a bare code)
+
+
+@app.get("/api/schwab/status")
+async def schwab_status() -> dict:
+    return {"configured": schwab.is_configured(), "connected": schwab.is_connected(),
+            "redirect_uri": schwab.redirect_uri()}
+
+
+@app.get("/api/schwab/auth-url")
+async def schwab_auth_url() -> dict:
+    if not schwab.is_configured():
+        raise HTTPException(status_code=400, detail="Set SCHWAB_APP_KEY and SCHWAB_APP_SECRET in .env first.")
+    return {"auth_url": schwab.authorize_url(), "redirect_uri": schwab.redirect_uri()}
+
+
+@app.post("/api/schwab/callback")
+async def schwab_callback(body: SchwabCallback) -> dict:
+    try:
+        await asyncio.to_thread(schwab.exchange_code, body.callback_url)
+    except Exception as e:
+        log.exception("Schwab code exchange failed")
+        raise HTTPException(status_code=400, detail=f"Token exchange failed: {e}")
+    return {"connected": True}
+
+
+@app.post("/api/schwab/disconnect")
+async def schwab_disconnect() -> dict:
+    schwab.disconnect()
+    return {"connected": False}
+
+
+@app.get("/api/portfolio")
+async def portfolio() -> dict:
+    """Live read-only account snapshot (balances + positions + recent fills). {connected: False} if
+    Schwab isn't linked. Never trades — pure decision support alongside the paper book."""
+    if not schwab.is_connected():
+        return {"connected": False}
+    try:
+        data = await asyncio.to_thread(schwab.get_portfolio)
+    except Exception as e:
+        log.exception("Schwab portfolio fetch failed")
+        raise HTTPException(status_code=502, detail=f"Schwab read failed: {e}")
+    return {"connected": True, **data}
 
 
 # ---- alert engine (phase 1): auto-scan on a schedule + auto-fill the review queue ----
