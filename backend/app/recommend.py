@@ -19,11 +19,20 @@ from .trade_case import _PRICES  # shared per-model price table for the cost est
 
 log = logging.getLogger(__name__)
 
-DEFAULT_RECOMMEND_MODEL = "claude-sonnet-4-6"  # triage is comparative but light; Sonnet is plenty
+# The nightly selection (bull/bear debate + ranking) is the highest-consequence autonomous
+# call in the loop — it decides what gets queued for the human to approve. That comparative,
+# steelman-both-sides reasoning is where Opus genuinely beats Sonnet, and the delta is ~$0.01/call
+# (~$0.25/mo). The morning recheck is a narrow gap/R:R gate, so it stays on the cheaper Sonnet.
+DEFAULT_RECOMMEND_MODEL = "claude-opus-4-8"
+DEFAULT_RECHECK_MODEL = "claude-sonnet-4-6"
 
 
 def _model() -> str:
     return os.environ.get("RECOMMEND_MODEL", DEFAULT_RECOMMEND_MODEL).strip()
+
+
+def _recheck_model() -> str:
+    return os.environ.get("RECHECK_MODEL", DEFAULT_RECHECK_MODEL).strip()
 
 
 RECOMMEND_SCHEMA = {
@@ -150,7 +159,7 @@ async def recheck(tickets: list[dict]) -> dict:
         "broken setup. Proceed (true) if the entry still makes sense at the open. Be decisive and brief — one "
         "sentence each. A modest overnight drift is normal and fine; only veto genuine breakdowns or blown R:R."
     )
-    model = _model()
+    model = _recheck_model()
     client = anthropic.AsyncAnthropic()
     try:
         resp = await client.messages.create(

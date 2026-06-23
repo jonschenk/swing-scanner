@@ -1,5 +1,7 @@
 # secrets
 .env
+backend/app/.schwab_key
+backend/app/.schwab_token.enc
 
 # python
 backend/.venv/
