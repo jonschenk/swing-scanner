@@ -277,7 +277,7 @@ function render(regime, engine, acct, journal, queue, notes, events, settings, e
       html += `<div class="empty">${isNightly?"Nothing to review yet. the engine proposes after the close.":"No pending alerts."}</div>`;
     }
     if (queue.decided && queue.decided.length) {
-      const mk = { executed:["✓ bought","pos"], approved:["✓ approved","pos"], skipped:["skipped","muted"], denied:["✕ skipped","neg"], expired:["expired","muted"] };
+      const mk = { executed:["bought","pos"], approved:["approved","pos"], skipped:["skipped","muted"], denied:["denied","neg"], expired:["expired","muted"] };
       html += `<div class="feed small" style="margin-top:6px"><span class="muted">Recent: </span>` +
         queue.decided.slice(0,10).map(d=>{const m=mk[d.status]||[d.status,"muted"]; return `<span class="${m[1]}">${d.ticker} ${m[0]}</span>`;}).join(" · ") + `</div>`;
     }
