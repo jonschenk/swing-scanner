@@ -331,8 +331,8 @@ function render(regime, engine, acct, journal, queue, notes, events, settings, e
           ${p.bear?`<div class="case bear"><span class="lbl">Bear:</span> ${p.bear}</div>`:""}
           ${p.reason?`<div class="case muted"><span class="lbl">Verdict:</span> ${p.reason}</div>`:""}
           <div class="btns">
-            <button class="approve" onclick="decide('${p.id}','approve','${p.ticker}')">✓ Approve</button>
-            <button class="skip" onclick="decide('${p.id}','deny','${p.ticker}')">✕ Skip</button>
+            <button class="approve" onclick="decide('${p.id}','approve','${p.ticker}')">Approve</button>
+            <button class="skip" onclick="decide('${p.id}','deny','${p.ticker}')">Skip</button>
           </div></div>`;
       }
     } else {
