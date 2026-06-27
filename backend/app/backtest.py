@@ -806,7 +806,7 @@ def _regime_day_counts(regime: pd.Series | None, start: str, split: str | None =
 def run_portfolio(ds: dict, settings: ScanSettings, max_positions: int, start: str, end: str,
                   max_hold: int = DEFAULT_MAX_HOLD, slippage_bps: float = 0.0,
                   strategy: str = "leader_pullback", starting_cash: float | None = None,
-                  regime_match: str | None = None) -> dict:
+                  regime_match: str | None = None, fractional: bool = False) -> dict:
     """Day-by-day PORTFOLIO simulation with the live constraints the per-trade backtest ignores:
     shared cash, a position-count cap, and a per-position allocation cap. Each day, candidate trades
     compete for the limited capital (ranked best-first by RS), so the book captures a realistic SUBSET
@@ -865,10 +865,11 @@ def run_portfolio(ds: dict, settings: ScanSettings, max_positions: int, start: s
             entry, stop_dist = t.entry, t.entry - t.stop
             if stop_dist <= 0:
                 continue
-            shares = min(math.floor(equity_now * settings.risk_pct / 100 / stop_dist),
-                         math.floor(cash / (entry * buf)),
-                         math.floor(equity_now * settings.max_alloc_pct / 100 / entry))
-            if shares < 1 or shares * entry > cash:
+            rnd = (lambda x: x) if fractional else math.floor   # fractional = no whole-share rounding
+            shares = min(rnd(equity_now * settings.risk_pct / 100 / stop_dist),
+                         rnd(cash / (entry * buf)),
+                         rnd(equity_now * settings.max_alloc_pct / 100 / entry))
+            if shares < (1e-9 if fractional else 1) or shares * entry > cash:
                 continue
             cash -= shares * entry
             positions[t.ticker] = {"shares": shares, "exit_date": t.exit_date, "exit_price": t.exit,
